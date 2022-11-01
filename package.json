@@ -11,7 +11,7 @@
     "lint": "standard src test"
   },
   "engines": {
-    "node": "18.11.0"
+    "node": "18.12"
   },
   "dependencies": {
     "@aws-sdk/util-dynamodb": "^3.200.0",
