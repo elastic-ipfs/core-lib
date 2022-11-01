@@ -1,13 +1,11 @@
 {
   "name": "e-ipfs-core-lib",
   "version": "0.1.0",
-  "description": "E-IPFS core libe",
-  "main": "index.js",
+  "description": "E-IPFS core library",
   "license": "(Apache-2.0 AND MIT)",
   "homepage": "https://github.com/elastic-ipfs/core-lib",
   "scripts": {
-    "test": "tap",
-    "test:ci": "npm run lint && npm run test",
+    "test": "c8 --reporter=text --reporter=html tap test/*.test.js",
     "format": "standard src test --fix",
     "lint": "standard src test"
   },
@@ -15,11 +13,9 @@
     "node": "18.11.0"
   },
   "dependencies": {
-    "@aws-sdk/util-dynamodb": "^3.199.0",
+    "@aws-sdk/util-dynamodb": "^3.200.0",
     "bl": "^6.0.0",
     "hdr-histogram-js": "^3.0.0",
-    "it-length-prefixed": "^8.0.3",
-    "it-pipe": "^2.0.4",
     "js-yaml": "^4.1.0",
     "libp2p": "^0.40.0",
     "pino": "^8.7.0",
@@ -31,9 +27,13 @@
     "xml-js": "^1.6.11"
   },
   "devDependencies": {
+    "c8": "^7.12.0",
+    "dedent": "^0.7.0",
+    "split2": "^4.1.0",
     "standard": "^17.0.0",
     "tap": "^16.3.0"
   },
   "type": "module",
-  "exports": "./src/index.js"
+  "exports": "./src/index.js",
+  "main": "./src/index.js"
 }
