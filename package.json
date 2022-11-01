@@ -6,7 +6,7 @@
   "homepage": "https://github.com/elastic-ipfs/core-lib",
   "scripts": {
     "test": "c8 --reporter=text --reporter=html tap test/*.test.js",
-    "test:ci": "npm test && c8 check-coverage --lines 100 --functions 100 --branches 100",
+    "test:ci": "c8 check-coverage --lines 100 --functions 100 --branches 100 --reporter=text --reporter=html tap test/*.test.js",
     "format": "standard src test --fix",
     "lint": "standard src test"
   },
