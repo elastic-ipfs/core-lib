@@ -1,0 +1,8 @@
+---
+component: bitswap-peer
+metrics:
+  bitswap-total-connections: BitSwap Total Connections
+  s3-request: AWS S3 requests
+  dynamo-request: AWS DynamoDB requests
+version: 0.1.0
+buildDate: "20220307.1423"
