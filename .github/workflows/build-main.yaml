@@ -1,0 +1,16 @@
+name: Build and Publish
+on: 
+  push:
+    branches:
+      - publish-package-workflow # TODO: Remove after validating
+      - main
+jobs:
+  build:
+    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@main
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    needs: build
