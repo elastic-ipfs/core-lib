@@ -7,10 +7,17 @@ import { Agent, MockAgent } from 'undici'
 import { marshall } from '@aws-sdk/util-dynamodb'
 
 import { awsClientOptions, createAwsClient, Client } from '../src/aws-client/index.js'
+import { dirname } from '../src/util.js'
 import * as helper from './helper/index.js'
 
+const DOCKER_DYNAMO_PORT = '8080'
+const DOCKER_DYNAMO_IMAGE = 'testing/dynamodb'
+const DOCKER_DYNAMO_NAME = 'testing-dynamodb'
+
 const defaultConfig = {
-  dynamoRegion: 'aws-test-region',
+  endpoint: 'http://localhost',
+
+  dynamoRegion: 'eu-west-2',
 
   awsClientRefreshCredentialsInterval: 10 * 60e3, // 10 min
   awsClientKeepAliveTimeout: 60e3, // 1min
@@ -349,8 +356,24 @@ t.test('Client', async t => {
   })
 
   t.test('dynamo', async t => {
+    let dynamo
+    t.before(async () => {
+      dynamo = await helper.startDynamo({
+        port: DOCKER_DYNAMO_PORT,
+        expose: '8000',
+        override: true,
+        cwd: path.join(dirname(import.meta.url), 'docker/dynamodb'),
+        imageName: DOCKER_DYNAMO_IMAGE,
+        containerName: DOCKER_DYNAMO_NAME
+      })
+    })
+
+    t.teardown(async () => {
+      // await helper.stopDynamo(dynamo.container)
+    })
+
     t.test('dynamoQueryBySortKey', async t => {
-      t.test('should query dynamo', async t => {
+      t.skip('OLD should query dynamo', async t => {
         const records = [{ a: 'b' }]
         const logger = helper.spyLogger()
         const options = awsClientOptions(defaultConfig, logger)
@@ -363,6 +386,22 @@ t.test('Client', async t => {
           .reply(200, { Items: records.map(r => marshall(r)) })
 
         t.same((await client.dynamoQueryBySortKey({ table: 'table', keyName: 'key', keyValue: 'id' })), records)
+      })
+
+      t.test('should query dynamo', async t => {
+        const table = 'table'
+        const key = 'key'
+        const item = { [key]: 'a1b2c3', value: 'content' }
+
+        const logger = helper.spyLogger()
+        const options = awsClientOptions(defaultConfig, logger)
+        options.endpoint += ':' + dynamo.port
+
+        const client = new Client(options)
+        await client.dynamoEnsureTable({ table, key: { name: key, type: 'S' }, attributes: [{ name: 'value', type: 'S' }] })
+        await client.dynamoPutItem({ table, item })
+
+        t.same((await client.dynamoQueryBySortKey({ table, keyName: key, keyValue: item[key] })), item)
       })
 
       t.test('should retry querying dynamo and eventually succeed', async t => {
@@ -590,6 +629,7 @@ t.test('awsClientOptions', async t => {
   const logger = 'the-logger'
 
   t.same(awsClientOptions(config, logger), {
+    endpoint: undefined,
     agent: undefined,
     awsAgentOptions: {
       connectTimeout: 987,

@@ -1,5 +1,11 @@
 import { MockAgent } from 'undici'
+import getPort from 'get-port'
 
+import * as docker from './docker.js'
+
+/**
+ * @deprecated use DynamoLocal instead
+ */
 export function createMockAgent () {
   const mockAgent = new MockAgent()
   mockAgent.disableNetConnect()
@@ -21,3 +27,24 @@ export function spyLogger () {
 }
 
 function noop () { }
+
+export async function startDynamo ({ port, expose, cwd, imageName, containerName }) {
+  if (!expose) {
+    expose = await getPort()
+  }
+  const container = await docker.build({
+    override: true,
+    cwd,
+    imageName,
+    containerName,
+    ports: `${expose}:${port}`
+  })
+  await docker.start(container)
+  // TODO! ping untill can connect
+
+  return { container, port: expose }
+}
+
+export async function stopDynamo (container) {
+  await docker.stop(container)
+}

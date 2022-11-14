@@ -6,7 +6,7 @@ import { Piscina } from 'piscina'
 import { Agent, request } from 'undici'
 import { xml2js } from 'xml-js'
 import { BufferList } from 'bl'
-import { unmarshall } from '@aws-sdk/util-dynamodb'
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { dirname } from '../util.js'
 
 const signerWorker = new Piscina({
@@ -20,7 +20,7 @@ const signerWorker = new Piscina({
  * @see https://docs.aws.amazon.com/index.html
  */
 class Client {
-  constructor ({ agent, awsAgentOptions, s3Options, dynamoOptions, refreshCredentialsInterval, roleArn = process.env.AWS_ROLE_ARN, identityToken, roleSessionName, logger }) {
+  constructor ({ agent, endpoint, awsAgentOptions, s3Options, dynamoOptions, refreshCredentialsInterval, roleArn = process.env.AWS_ROLE_ARN, identityToken, roleSessionName, logger }) {
     // TODO validate params
 
     if (!dynamoOptions?.region) {
@@ -28,10 +28,11 @@ class Client {
     }
 
     this.agent = agent
+    this.endpoint = endpoint
     this.awsAgentOptions = awsAgentOptions
     this.s3Options = s3Options
     this.dynamoOptions = dynamoOptions
-    this.dynamoUrl = `https://dynamodb.${dynamoOptions.region}.amazonaws.com`
+    this.dynamoUrl = endpoint ?? `https://dynamodb.${dynamoOptions.region}.amazonaws.com`
 
     this.refreshCredentialsInterval = refreshCredentialsInterval
     this.credentialRefreshTimer = null
@@ -50,6 +51,7 @@ class Client {
 
   async init () {
     // custom agent is set for testing purpose only
+    // TODO remove once moved to DynamoLocal
     if (this.agent) {
       return
     }
@@ -315,6 +317,58 @@ class Client {
   }
 
   /**
+   * @see https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.htm
+   */
+  async dynamoPutItem ({ table, item, retries, retryDelay }) {
+    if (!retries) { retries = this.dynamoOptions.maxRetries }
+    if (!retryDelay) { retryDelay = this.dynamoOptions.retryDelay }
+
+    const request = {
+      TableName: table,
+      Item: marshall(item)
+    }
+    const payload = JSON.stringify(request)
+
+    const headers = await signerWorker.run({
+      url: this.dynamoUrl,
+      region: this.dynamoOptions.region,
+      keyId: this.credentials.keyId,
+      accessKey: this.credentials.accessKey,
+      sessionToken: this.credentials.sessionToken,
+      service: 'dynamodb',
+      method: 'POST',
+      headers: { 'x-amz-target': 'DynamoDB_20120810.PutItem' },
+      payload
+    })
+
+    let attempts = 0
+    let err
+    let record
+    do {
+      try {
+        record = await this.dynamoRequest({ url: this.dynamoUrl, headers, payload })
+        break
+      } catch (error) {
+        this.logger.debug(
+          { err, table, item },
+          `Cannot Dynamo.PutItem attempt ${attempts + 1} / ${retries}`
+        )
+        err = error
+      }
+      await sleep(retryDelay)
+    } while (++attempts < retries)
+
+    if (record?.Item) {
+      return unmarshall(record.Item)
+    }
+
+    if (!err) { return }
+
+    this.logger.error({ err, table, item }, `Cannot Dynamo.PutItem after ${attempts} attempts`)
+    throw new Error('Dynamo.PutItem')
+  }
+
+  /**
    * @see https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DescribeTable.html
    */
   async dynamoDescribeTable (table) {
@@ -339,6 +393,53 @@ class Client {
       this.logger.error({ err, table }, 'Cannot Dynamo.DescribeTable')
       throw new Error('Dynamo.DescribeTable')
     }
+  }
+
+  /**
+   * @see https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html
+   */
+  async dynamoCreateTable ({ table, key, attributes }) {
+    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html#API_CreateTable_RequestSyntax
+    // TODO param mapping
+    const payload = JSON.stringify({
+      TableName: table,
+      KeySchema: [{ AttributeName: key.name, KeyType: 'HASH' }, { AttributeName: attributes[0].name, KeyType: 'RANGE' }],
+      AttributeDefinitions: attributes
+        .map(a => ({ AttributeName: a.name, AttributeType: a.type }))
+        .concat([{ AttributeName: key.name, AttributeType: key.type }]),
+      ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+    })
+
+    const headers = await signerWorker.run({
+      url: this.dynamoUrl,
+      region: this.dynamoOptions.region,
+      keyId: this.credentials.keyId,
+      accessKey: this.credentials.accessKey,
+      sessionToken: this.credentials.sessionToken,
+      service: 'dynamodb',
+      method: 'POST',
+      headers: { 'x-amz-target': 'DynamoDB_20120810.CreateTable' },
+      payload
+    })
+
+    try {
+      return await this.dynamoRequest({ url: this.dynamoUrl, headers, payload })
+    } catch (err) {
+      this.logger.error({ err, name: table, key, attributes }, 'Cannot Dynamo.CreateTable')
+      throw new Error('Dynamo.CreateTable')
+    }
+  }
+
+  /**
+   * ensure table exists or create it
+   * differences on key and attributes are ignored on the check
+   */
+  async dynamoEnsureTable ({ table, key, attributes }) {
+    try {
+      await this.dynamoDescribeTable(table)
+      return true
+    } catch (err) { }
+    const t = await this.dynamoCreateTable({ table, key, attributes })
   }
 
   async dynamoRequest ({ url, headers, payload }) {
