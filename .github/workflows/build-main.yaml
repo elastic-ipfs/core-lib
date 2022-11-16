@@ -7,10 +7,7 @@ on:
 jobs:
   build:
     uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@publish-package-workflow # TODO: Change this to 'main'
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-    - run: npm publish
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-    needs: build
+    with:
+      npm_push: true
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
