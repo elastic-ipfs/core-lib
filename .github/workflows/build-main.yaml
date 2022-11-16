@@ -6,7 +6,7 @@ on:
       - main
 jobs:
   build:
-    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@main
+    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@publish-package-workflow # TODO: Change this to 'main'
   publish:
     runs-on: ubuntu-latest
     steps:
