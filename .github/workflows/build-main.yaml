@@ -5,7 +5,7 @@ on:
       - publish-package-workflow # TODO: Remove after validating
       - main
 jobs:
-  build:
+  build-and-push:
     uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@publish-package-workflow # TODO: Change this to 'main'
     with:
       npm_push: true
