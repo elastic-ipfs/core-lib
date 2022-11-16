@@ -2,11 +2,10 @@ name: Build and Publish
 on: 
   push:
     branches:
-      - publish-package-workflow # TODO: Remove after validating
       - main
 jobs:
   build-and-push:
-    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@publish-package-workflow # TODO: Change this to 'main'
+    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@main
     with:
       npm_push: true
     secrets:
