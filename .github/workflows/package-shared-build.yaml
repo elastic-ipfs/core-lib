@@ -1,0 +1,36 @@
+name: 'Shared build flow'
+
+on:
+  workflow_call:
+    inputs:
+      npm_push:
+        type: boolean
+        description: Whether to push after build
+        required: false
+    secrets:
+      NPM_TOKEN:
+        required: false
+        description: Only required if pushing no npm
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.12]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install Dependencies
+        run: npm install --ignore-scripts
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test:ci        
+      - run: npm publish
+        if: inputs.npm_push
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

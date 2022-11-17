@@ -1,0 +1,10 @@
+name: PR | Build
+on: 
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@main
+    with:
+      npm_push: false

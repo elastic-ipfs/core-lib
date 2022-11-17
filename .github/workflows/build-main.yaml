@@ -1,0 +1,12 @@
+name: Build and Publish
+on: 
+  push:
+    branches:
+      - main
+jobs:
+  build-and-push:
+    uses: elastic-ipfs/core-lib/.github/workflows/package-shared-build.yaml@main
+    with:
+      npm_push: true
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
