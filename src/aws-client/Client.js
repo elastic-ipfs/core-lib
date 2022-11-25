@@ -217,7 +217,11 @@ class Client {
       throw new Error('NOT_FOUND')
     }
     if (statusCode >= 400) {
-      throw new Error(`S3 request error - Status: ${statusCode} Body: ${buffer.slice().toString('utf-8')} `)
+      const body = buffer.slice().toString('utf-8')
+      if (body.includes('ExpiredToken')) {
+        await this.refreshCredentials()
+      }
+      throw new Error(`S3 request error - Status: ${statusCode} Body: ${body} `)
     }
 
     return buffer.slice()
@@ -372,6 +376,10 @@ class Client {
     const content = buffer.slice().toString('utf-8')
 
     if (statusCode >= 400) {
+      if (content.includes('ExpiredTokenException')) {
+        await this.refreshCredentials()
+      }
+
       throw new Error(`Dynamo request error - Status: ${statusCode} Body: ${content} `)
     }
 

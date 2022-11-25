@@ -323,6 +323,28 @@ t.test('Client', async t => {
       })
     })
 
+    t.test('s3Request', async t => {
+      t.test('should call refresh credential on expired token error', async t => {
+        const body = `<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>ExpiredToken</Code>
+          <Message>The provided token has expired.</Message><Token-0>Fwo...Aw==</Token-0>
+          <RequestId>7A39TX8QWC98V71K</RequestId><HostId>elf...og==</HostId></Error>`
+        let refresh
+        const logger = helper.dummyLogger()
+        const options = awsClientOptions(defaultConfig, logger)
+        options.agent = helper.createMockAgent()
+
+        const client = new Client(options)
+        client.refreshCredentials = async () => { refresh = true }
+        client.agent
+          .get(client.s3Url(region, bucket))
+          .intercept({ method: 'GET', path: key })
+          .reply(400, body)
+
+        await t.rejects(() => client.s3Fetch({ region, bucket, key, retries: 3, retryDelay: 10 }))
+        t.ok(refresh)
+      })
+    })
+
     t.test('s3Fetch', async t => {
       t.test('should fetch from s3', async t => {
         const logger = helper.spyLogger()
@@ -478,6 +500,27 @@ t.test('Client', async t => {
   })
 
   t.test('dynamo', async t => {
+    t.test('dynamoRequest', async t => {
+      t.test('should call refresh credential on expired token error', async t => {
+        const body = `{"__type":"com.amazon.coral.service#ExpiredTokenException",
+        "message":"The security token included in the request is expired"}`
+        let refresh
+        const logger = helper.dummyLogger()
+        const options = awsClientOptions(defaultConfig, logger)
+        options.agent = helper.createMockAgent()
+
+        const client = new Client(options)
+        client.refreshCredentials = async () => { refresh = true }
+        client.agent
+          .get(client.dynamoUrl)
+          .intercept({ method: 'POST', path: '/' })
+          .reply(400, body)
+
+        await t.rejects(() => client.dynamoGetItem({ table: 'table', keyName: 'key', keyValue: 'id', projection: 'items' }))
+        t.ok(refresh)
+      })
+    })
+
     t.test('dynamoQueryBySortKey', async t => {
       t.test('should query dynamo', async t => {
         const records = [{ a: 'b' }]
