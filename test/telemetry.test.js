@@ -2,8 +2,7 @@
 import path from 'path'
 import t from 'tap'
 import dedent from 'dedent'
-import { dirname } from '../src/util.js'
-import { Telemetry } from '../src/telemetry.js'
+import { Telemetry, dirname } from '../src/index.js'
 import * as helper from './helper/index.js'
 
 // process.env.NOW = 'now'

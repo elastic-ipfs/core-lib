@@ -2,7 +2,7 @@
 import path from 'path'
 import t from 'tap'
 import { CID } from 'multiformats/cid'
-import { dirname, version, cidToKey } from '../src/util.js'
+import { dirname, version, cidToKey } from '../src/index.js'
 
 t.test('dirname', async t => {
   t.test('get the dirname', async t => {

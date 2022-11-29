@@ -13,7 +13,7 @@ import {
   maxPriority,
   BLOCK_TYPE_DATA,
   BLOCK_TYPE_INFO
-} from '../src/protocol.js'
+} from '../src/index.js'
 
 const cid = CID.parse('bafybeiccfclkdtucu6y4yc5cpr6y3yuinr67svmii46v5cfcrkp47ihehy')
 
