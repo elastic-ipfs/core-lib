@@ -11,7 +11,9 @@ class Aggregator {
     this.description = `${description} (${metric})`
     this.exportName = this.tag.replaceAll('-', '_')
 
+    // type is optional
     if (!type) {
+      // set the type by the metric
       if (metric === 'durations') {
         this.type = 'histogram'
       } else {
