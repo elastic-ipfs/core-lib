@@ -13,6 +13,7 @@ function hmacSha256 (key, contents) {
   return createHmac('sha256', key).update(contents).digest()
 }
 
+// This is a commonJS file beacuse Piscina requires a CJS to work
 module.exports = function ({
   region,
   keyId,

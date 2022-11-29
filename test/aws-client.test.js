@@ -6,7 +6,7 @@ import fs from 'fs/promises'
 import { Agent, MockAgent } from 'undici'
 import { marshall } from '@aws-sdk/util-dynamodb'
 
-import { awsClientOptions, createAwsClient, Client } from '../src/aws-client/index.js'
+import { awsClientOptions, createAwsClient, Client } from '../src/index.js'
 import * as helper from './helper/index.js'
 
 const defaultConfig = {

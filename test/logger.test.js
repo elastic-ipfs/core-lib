@@ -2,7 +2,7 @@
 import t from 'tap'
 // eslint-disable-next-line import/no-named-default
 import { default as split } from 'split2'
-import { createLogger } from '../src/logger.js'
+import { createLogger } from '../src/index.js'
 
 function once (emitter, name) {
   return new Promise((resolve, reject) => {
