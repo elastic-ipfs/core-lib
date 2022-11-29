@@ -168,13 +168,13 @@ t.test('Telemetry', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
       telemetry.createMetric('c1', 'COUNTER', 'durations')
-      telemetry.createMetric('c2-active', 'GAUGE', 'count')
+      telemetry.createMetric('c2', 'GAUGE', 'count', 'gauge')
       telemetry.createMetric('c3', 'HISTOGRAM', 'durations')
 
       t.equal(telemetry.export(), dedent`
-      # HELP c2_active_count GAUGE (count)
-      # TYPE c2_active_count gauge
-      c2_active_count 0 now`.trim()
+      # HELP c2_count GAUGE (count)
+      # TYPE c2_count gauge
+      c2_count 0 now`.trim()
       )
     })
 
@@ -182,20 +182,20 @@ t.test('Telemetry', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
       telemetry.createMetric('c1', 'COUNTER', 'count')
-      telemetry.createMetric('c2-active', 'GAUGE', 'count')
+      telemetry.createMetric('c2', 'GAUGE', 'count', 'gauge')
       telemetry.createMetric('c3', 'HISTOGRAM', 'durations')
 
       telemetry.increaseCount('c1', 1)
-      telemetry.increaseCount('c2-active', 2)
+      telemetry.increaseCount('c2', 2)
       telemetry.ensureMetric('c3', 'durations').record(3)
 
       t.equal(telemetry.export(), dedent`
       # HELP c1_count_total COUNTER (count)
       # TYPE c1_count_total counter
       c1_count_total 1 now
-      # HELP c2_active_count GAUGE (count)
-      # TYPE c2_active_count gauge
-      c2_active_count 2 now
+      # HELP c2_count GAUGE (count)
+      # TYPE c2_count gauge
+      c2_count 2 now
       # HELP c3_durations HISTOGRAM (durations)
       # TYPE c3_durations histogram
       c3_durations_count 1 now

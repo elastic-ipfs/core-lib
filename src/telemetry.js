@@ -1,30 +1,36 @@
 
 import { readFileSync } from 'fs'
 import { load as ymlLoad } from 'js-yaml'
-import { build as buildHistogram } from 'hdr-histogram-js'
+import * as hdr from 'hdr-histogram-js'
 
 const PERCENTILES = [0.001, 0.01, 0.1, 1, 2.5, 10, 25, 50, 75, 90, 97.5, 99, 99.9, 99.99, 99.999]
 
 class Aggregator {
-  constructor (category, description, metric) {
+  constructor (category, description, metric, type) {
     this.tag = `${category}-${metric}`
     this.description = `${description} (${metric})`
     this.exportName = this.tag.replaceAll('-', '_')
 
-    if (category.match(/active|pending/)) {
-      this.type = 'gauge'
-    } else if (metric === 'durations') {
-      this.type = 'histogram'
+    // type is optional
+    if (!type) {
+      // set the type by the metric
+      if (metric === 'durations') {
+        this.type = 'histogram'
+      } else {
+        this.type = 'counter'
+        this.exportName += '_total'
+      }
     } else {
-      this.type = 'counter'
-      this.exportName += '_total'
+      this.type = type
     }
 
     this.sum = 0
-    this.histogram = buildHistogram({
+    hdr.initWebAssemblySync()
+    this.histogram = hdr.build({
       lowestDiscernibleValue: 1,
       highestTrackableValue: 1e9,
-      numberOfSignificantValueDigits: 5
+      numberOfSignificantValueDigits: 5,
+      useWebAssembly: true
     })
   }
 
@@ -103,8 +109,8 @@ class Telemetry {
     this.metrics.clear()
   }
 
-  createMetric (category, description, metric) {
-    const instance = new Aggregator(category, description, metric)
+  createMetric (category, description, metric, type) {
+    const instance = new Aggregator(category, description, metric, type)
 
     this.metrics.set(instance.tag, instance)
   }

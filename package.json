@@ -1,6 +1,6 @@
 {
   "name": "e-ipfs-core-lib",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "E-IPFS core library",
   "license": "(Apache-2.0 AND MIT)",
   "homepage": "https://github.com/elastic-ipfs/core-lib",
@@ -14,7 +14,7 @@
     "node": "18.12"
   },
   "dependencies": {
-    "@aws-sdk/util-dynamodb": "^3.200.0",
+    "@aws-sdk/util-dynamodb": "^3.216.0",
     "bl": "^6.0.0",
     "hdr-histogram-js": "^3.0.0",
     "js-yaml": "^4.1.0",
@@ -32,7 +32,7 @@
     "dedent": "^0.7.0",
     "split2": "^4.1.0",
     "standard": "^17.0.0",
-    "tap": "^16.3.0"
+    "tap": "^16.3.2"
   },
   "type": "module",
   "exports": "./src/index.js",
