@@ -92,6 +92,40 @@ t.test('Client', async t => {
       t.equal(client.credentials.keyId, 'the-key')
       t.equal(client.credentials.accessKey, 'the-secret')
     })
+
+    t.test('should fails on failing acquire credentials', async t => {
+      process.env.AWS_ROLE_ARN = ''
+      process.env.AWS_WEB_IDENTITY_TOKEN_FILE = ''
+      process.env.AWS_ACCESS_KEY_ID = ''
+      process.env.AWS_SECRET_ACCESS_KEY = ''
+
+      const client = new Client({ refreshCredentialsInterval: 100, dynamoOptions: { region: 'dynamo-region' } })
+      client.refreshCredentials = async () => { throw new Error('SOMETHING_WRONG') }
+      await t.rejects(() => client.init(), { message: 'SOMETHING_WRONG' })
+    })
+
+    t.test('should handle error on periodic credential refresh', async t => {
+      process.env.AWS_ROLE_ARN = ''
+      process.env.AWS_WEB_IDENTITY_TOKEN_FILE = ''
+      process.env.AWS_ACCESS_KEY_ID = ''
+      process.env.AWS_SECRET_ACCESS_KEY = ''
+
+      const logger = helper.spyLogger()
+      const client = new Client({ refreshCredentialsInterval: 50, logger, dynamoOptions: { region: 'dynamo-region' } })
+      let refresh = 0
+      client.refreshCredentials = async () => {
+        if (refresh > 0) {
+          throw new Error('SOMETHING_WRONG')
+        }
+        refresh++
+      }
+      await client.init()
+      await sleep(150)
+      client.close()
+
+      // t.ok(logger.messages.fatal.length > 0)
+      // t.equal(logger.messages.fatal[0][1], 'AwsClient.refreshCredentials failed')
+    })
   })
 
   t.test('refreshCredentials', async t => {
@@ -100,6 +134,7 @@ t.test('Client', async t => {
       options.roleArn = 'role'
       options.identityToken = 'identity'
       options.roleSessionName = 'eipf-service'
+      options.credentialDurationSeconds = 123456
       options.agent = helper.createMockAgent()
 
       const client = new Client(options)
@@ -107,7 +142,43 @@ t.test('Client', async t => {
         .get('https://sts.amazonaws.com')
         .intercept({
           method: 'GET',
-          path: '/?Version=2011-06-15&Action=AssumeRoleWithWebIdentity&RoleArn=role&RoleSessionName=eipf-service&WebIdentityToken=identity'
+          path: '/?Version=2011-06-15&Action=AssumeRoleWithWebIdentity&RoleArn=role&RoleSessionName=eipf-service&DurationSeconds=123456&WebIdentityToken=identity'
+        })
+        .reply(
+          200,
+          `
+        <AssumeRoleWithWebIdentityResponse>
+          <AssumeRoleWithWebIdentityResult>
+            <Credentials>
+              <SessionToken>sessionToken</SessionToken>
+              <SecretAccessKey>accessKey</SecretAccessKey>
+              <AccessKeyId>keyId</AccessKeyId>
+            </Credentials>
+          </AssumeRoleWithWebIdentityResult>
+        </AssumeRoleWithWebIdentityResponse>
+        `
+        )
+
+      await client.refreshCredentials()
+      t.equal(client.credentials.keyId, 'keyId')
+      t.equal(client.credentials.accessKey, 'accessKey')
+      t.equal(client.credentials.sessionToken, 'sessionToken')
+    })
+
+    t.test('should not set optional options to refresh credential request', async t => {
+      const options = awsClientOptions(defaultConfig, helper.dummyLogger())
+      options.agent = helper.createMockAgent()
+      options.roleArn = ''
+      options.identityToken = ''
+      options.roleSessionName = ''
+      options.credentialDurationSeconds = null
+
+      const client = new Client(options)
+      client.agent
+        .get('https://sts.amazonaws.com')
+        .intercept({
+          method: 'GET',
+          path: '/?Version=2011-06-15&Action=AssumeRoleWithWebIdentity'
         })
         .reply(
           200,
@@ -180,6 +251,64 @@ t.test('Client', async t => {
 
       t.ok(refresh, times)
     })
+
+    t.test('should refresh identity token refreshing credentials', async t => {
+      process.env.AWS_ROLE_ARN = ''
+      process.env.AWS_WEB_IDENTITY_TOKEN_FILE = 'test/fixtures/aws-identity-token'
+      process.env.AWS_ACCESS_KEY_ID = ''
+      process.env.AWS_SECRET_ACCESS_KEY = ''
+
+      const tokenFile = path.resolve(process.cwd(), process.env.AWS_WEB_IDENTITY_TOKEN_FILE)
+      const tokens = ['token1', 'token2']
+      await fs.writeFile(tokenFile, tokens[0], 'utf8')
+
+      const options = awsClientOptions(defaultConfig, helper.dummyLogger())
+      options.refreshCredentialsInterval = 50
+
+      const client = new Client(options)
+      let refresh = 0
+      client.refreshCredentials = async function () {
+        refresh++
+      }
+
+      await client.init()
+      t.equal(client.identityToken, tokens[0])
+
+      await fs.writeFile(tokenFile, tokens[1], 'utf8')
+      await sleep(options.refreshCredentialsInterval * 2)
+
+      t.equal(client.identityToken, tokens[1])
+      t.ok(refresh > 1, 'refresh credentials function called more than once')
+
+      client.close()
+    })
+
+    t.test('should not refresh identity token on refreshing credentials if AWS_WEB_IDENTITY_TOKEN_FILE is not set', async t => {
+      process.env.AWS_ROLE_ARN = ''
+      process.env.AWS_WEB_IDENTITY_TOKEN_FILE = ''
+      process.env.AWS_ACCESS_KEY_ID = ''
+      process.env.AWS_SECRET_ACCESS_KEY = ''
+      const token = 'the-token'
+
+      const options = awsClientOptions(defaultConfig, helper.dummyLogger())
+      options.refreshCredentialsInterval = 50
+      options.identityToken = token
+
+      const client = new Client(options)
+      let refresh = 0
+      client.refreshCredentials = async function () {
+        refresh++
+      }
+      await client.init()
+      t.equal(client.identityToken, token)
+
+      await sleep(options.refreshCredentialsInterval * 2)
+
+      t.equal(client.identityToken, token)
+      t.ok(refresh > 1, 'refresh credentials function called more than once')
+
+      client.close()
+    })
   })
 
   t.test('s3', async t => {
@@ -191,6 +320,28 @@ t.test('Client', async t => {
       t.test('should compose the s3 url', async t => {
         const client = new Client({ dynamoOptions: { region: 'dynamo-region' } })
         t.equal(client.s3Url('the-region', 'the-bucket', '/the-key'), 'https://the-bucket.s3.the-region.amazonaws.com/the-key')
+      })
+    })
+
+    t.test('s3Request', async t => {
+      t.test('should call refresh credential on expired token error', async t => {
+        const body = `<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>ExpiredToken</Code>
+          <Message>The provided token has expired.</Message><Token-0>Fwo...Aw==</Token-0>
+          <RequestId>7A39TX8QWC98V71K</RequestId><HostId>elf...og==</HostId></Error>`
+        let refresh
+        const logger = helper.dummyLogger()
+        const options = awsClientOptions(defaultConfig, logger)
+        options.agent = helper.createMockAgent()
+
+        const client = new Client(options)
+        client.refreshCredentials = async () => { refresh = true }
+        client.agent
+          .get(client.s3Url(region, bucket))
+          .intercept({ method: 'GET', path: key })
+          .reply(400, body)
+
+        await t.rejects(() => client.s3Fetch({ region, bucket, key, retries: 3, retryDelay: 10 }))
+        t.ok(refresh)
       })
     })
 
@@ -349,6 +500,27 @@ t.test('Client', async t => {
   })
 
   t.test('dynamo', async t => {
+    t.test('dynamoRequest', async t => {
+      t.test('should call refresh credential on expired token error', async t => {
+        const body = `{"__type":"com.amazon.coral.service#ExpiredTokenException",
+        "message":"The security token included in the request is expired"}`
+        let refresh
+        const logger = helper.dummyLogger()
+        const options = awsClientOptions(defaultConfig, logger)
+        options.agent = helper.createMockAgent()
+
+        const client = new Client(options)
+        client.refreshCredentials = async () => { refresh = true }
+        client.agent
+          .get(client.dynamoUrl)
+          .intercept({ method: 'POST', path: '/' })
+          .reply(400, body)
+
+        await t.rejects(() => client.dynamoGetItem({ table: 'table', keyName: 'key', keyValue: 'id', projection: 'items' }))
+        t.ok(refresh)
+      })
+    })
+
     t.test('dynamoQueryBySortKey', async t => {
       t.test('should query dynamo', async t => {
         const records = [{ a: 'b' }]

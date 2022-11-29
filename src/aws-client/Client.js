@@ -1,6 +1,6 @@
 
 import path from 'path'
-import fs from 'fs/promises'
+import fs from 'fs'
 import { setTimeout as sleep } from 'timers/promises'
 import { Piscina } from 'piscina'
 import { Agent, request } from 'undici'
@@ -20,24 +20,30 @@ const signerWorker = new Piscina({
  * @see https://docs.aws.amazon.com/index.html
  */
 class Client {
-  constructor ({ agent, awsAgentOptions, s3Options, dynamoOptions, refreshCredentialsInterval, roleArn = process.env.AWS_ROLE_ARN, identityToken, roleSessionName, logger }) {
+  constructor ({ agent, awsAgentOptions, s3Options, dynamoOptions, refreshCredentialsInterval, credentialDurationSeconds, roleArn = process.env.AWS_ROLE_ARN, identityToken, roleSessionName, logger }) {
     // TODO validate params
 
     if (!dynamoOptions?.region) {
       throw new Error('missing dynamo region')
     }
 
-    this.agent = agent
+    // custom agent is set for testing purpose only
+    this.agent = agent ?? new Agent(this.awsAgentOptions)
     this.awsAgentOptions = awsAgentOptions
     this.s3Options = s3Options
     this.dynamoOptions = dynamoOptions
     this.dynamoUrl = `https://dynamodb.${dynamoOptions.region}.amazonaws.com`
 
+    this.credentialDurationSeconds = credentialDurationSeconds // in seconds
     this.refreshCredentialsInterval = refreshCredentialsInterval
     this.credentialRefreshTimer = null
     this.roleArn = roleArn
     this.identityToken = identityToken
     this.roleSessionName = roleSessionName
+
+    if (!this.identityToken && process.env.AWS_WEB_IDENTITY_TOKEN_FILE) {
+      this.identityTokenFile = path.resolve(process.cwd(), process.env.AWS_WEB_IDENTITY_TOKEN_FILE)
+    }
 
     this.logger = logger
 
@@ -49,12 +55,6 @@ class Client {
   }
 
   async init () {
-    // custom agent is set for testing purpose only
-    if (this.agent) {
-      return
-    }
-    this.agent = new Agent(this.awsAgentOptions)
-
     if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
       this.credentials.keyId = process.env.AWS_ACCESS_KEY_ID
       this.credentials.accessKey = process.env.AWS_SECRET_ACCESS_KEY
@@ -62,26 +62,39 @@ class Client {
       return
     }
 
-    if (!this.identityToken && process.env.AWS_WEB_IDENTITY_TOKEN_FILE) {
-      this.identityToken = await fs.readFile(path.resolve(process.cwd(), process.env.AWS_WEB_IDENTITY_TOKEN_FILE), 'utf8')
+    if (this.identityTokenFile) {
+      this.identityToken = fs.readFileSync(this.identityTokenFile, 'utf8')
     }
 
     if (!this.refreshCredentialsInterval) {
       return
     }
 
+    const credentials = await this.refreshCredentials()
+
     // Every N minutes we rotate the keys using STS
-    this.credentialRefreshTimer = setInterval(() => {
-      this.refreshCredentials()
+    this.credentialRefreshTimer = setInterval(async () => {
+      try {
+        if (this.identityTokenFile) {
+          this.identityToken = fs.readFileSync(this.identityTokenFile, 'utf8')
+        }
+        await this.refreshCredentials()
+      } catch (err) {
+        this.logger.fatal({ err }, 'AwsClient.refreshCredentials failed')
+      }
     }, this.refreshCredentialsInterval).unref()
 
-    return this.refreshCredentials()
+    return credentials
   }
 
   close () {
     this.credentialRefreshTimer && clearInterval(this.credentialRefreshTimer)
   }
 
+  /**
+   * get credentials for dynamo and s3 requests
+   * @see https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+   */
   async refreshCredentials () {
     const url = new URL('https://sts.amazonaws.com')
 
@@ -90,6 +103,8 @@ class Client {
     this.roleArn && url.searchParams.append('RoleArn', this.roleArn)
     this.roleSessionName && url.searchParams.append('RoleSessionName', this.roleSessionName)
     this.identityToken && url.searchParams.append('WebIdentityToken', this.identityToken)
+    // DurationSeconds default is 3600 seconds
+    this.credentialDurationSeconds && url.searchParams.append('DurationSeconds', this.credentialDurationSeconds)
 
     const { statusCode, body } = await request(url, { dispatcher: this.agent })
 
@@ -202,7 +217,11 @@ class Client {
       throw new Error('NOT_FOUND')
     }
     if (statusCode >= 400) {
-      throw new Error(`S3 request error - Status: ${statusCode} Body: ${buffer.slice().toString('utf-8')} `)
+      const body = buffer.slice().toString('utf-8')
+      if (body.includes('ExpiredToken')) {
+        await this.refreshCredentials()
+      }
+      throw new Error(`S3 request error - Status: ${statusCode} Body: ${body} `)
     }
 
     return buffer.slice()
@@ -357,6 +376,10 @@ class Client {
     const content = buffer.slice().toString('utf-8')
 
     if (statusCode >= 400) {
+      if (content.includes('ExpiredTokenException')) {
+        await this.refreshCredentials()
+      }
+
       throw new Error(`Dynamo request error - Status: ${statusCode} Body: ${content} `)
     }
 
