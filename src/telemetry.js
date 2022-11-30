@@ -4,6 +4,10 @@ import * as hdr from 'hdr-histogram-js'
 
 const PERCENTILES = [0.001, 0.01, 0.1, 1, 2.5, 10, 25, 50, 75, 90, 97.5, 99, 99.9, 99.99, 99.999]
 
+const METRIC_GROUPED_COUNT = 'grouped-count'
+const METRIC_DURATIONS = 'durations'
+const METRIC_COUNT = 'count'
+
 class Aggregator {
   constructor (category, description, metric, type) {
     this.tag = `${category}-${metric}`
@@ -13,12 +17,12 @@ class Aggregator {
     // type is optional
     if (!type) {
       // set the type by the metric
-      if (metric === 'durations') {
+      if (metric === METRIC_DURATIONS) {
         this.type = 'histogram'
       } else {
         this.type = 'counter'
         this.exportName += '_total'
-        this.isGrouped = metric === 'grouped-count'
+        this.isGrouped = metric === METRIC_GROUPED_COUNT
       }
     } else {
       this.type = type
@@ -110,9 +114,9 @@ class Telemetry {
       // Create metrics
       this.metrics = new Map()
       for (const [category, description] of Object.entries(metrics)) {
-        this.createMetric(category, description, 'count')
-        this.createMetric(category, description, 'groupedCount')
-        this.createMetric(category, description, 'durations')
+        this.createMetric(category, description, METRIC_COUNT)
+        this.createMetric(category, description, METRIC_GROUPED_COUNT)
+        this.createMetric(category, description, METRIC_DURATIONS)
       }
     } catch (err) {
       logger.error({ err }, 'error in telemetry constructor')
@@ -178,27 +182,27 @@ class Telemetry {
   }
 
   increaseCount (category, amount = 1) {
-    const metric = this.ensureMetric(category, 'count')
+    const metric = this.ensureMetric(category, METRIC_COUNT)
     metric.record(amount)
   }
 
   decreaseCount (category, amount = 1) {
-    const metric = this.ensureMetric(category, 'count')
+    const metric = this.ensureMetric(category, METRIC_COUNT)
     metric.record(-1 * amount)
   }
 
   increaseCountWithKey (category, key, amount = 1) {
-    const metric = this.ensureMetric(category, 'grouped-count')
+    const metric = this.ensureMetric(category, METRIC_GROUPED_COUNT)
     metric.recordWithKey(key, amount)
   }
 
   decreaseCountWithKey (category, key, amount = 1) {
-    const metric = this.ensureMetric(category, 'grouped-count')
+    const metric = this.ensureMetric(category, METRIC_GROUPED_COUNT)
     metric.recordWithKey(key, -1 * amount)
   }
 
   async trackDuration (category, promise) {
-    const metric = this.ensureMetric(category, 'durations')
+    const metric = this.ensureMetric(category, METRIC_DURATIONS)
     const startTime = process.hrtime.bigint()
 
     try {
@@ -209,4 +213,4 @@ class Telemetry {
   }
 }
 
-export { Telemetry }
+export { Telemetry, METRIC_COUNT, METRIC_DURATIONS, METRIC_GROUPED_COUNT }
