@@ -1,4 +1,3 @@
-
 import { readFileSync } from 'fs'
 import { load as ymlLoad } from 'js-yaml'
 import * as hdr from 'hdr-histogram-js'
@@ -19,11 +18,13 @@ class Aggregator {
       } else {
         this.type = 'counter'
         this.exportName += '_total'
+        this.isGrouped = metric === 'grouped-count'
       }
     } else {
       this.type = type
     }
 
+    this.groupedSum = {}
     this.sum = 0
     hdr.initWebAssemblySync()
     this.histogram = hdr.build({
@@ -42,8 +43,17 @@ class Aggregator {
     }
   }
 
+  recordWithKey (key, value) {
+    if (!this.groupedSum[key]) {
+      this.groupedSum[key] = value
+    } else {
+      this.groupedSum[key] += value
+    }
+  }
+
   reset () {
     this.sum = 0
+    this.groupedSum = {}
     this.histogram.reset()
   }
 
@@ -51,8 +61,12 @@ class Aggregator {
     const { minNonZeroValue: min, maxValue: max, mean, stdDeviation: stdDev, totalCount: count } = this.histogram
 
     const value = {
-      empty: (this.type === 'histogram' && count === 0) || (this.type === 'counter' && this.sum === 0),
+      empty: (this.type === 'histogram' && count === 0) ||
+        ((this.type === 'counter' && !this.isGrouped) && this.sum === 0) ||
+        ((this.type === 'counter' && this.isGrouped) && Object.keys(this.groupedSum) === 0),
       sum: this.sum,
+      isGrouped: this.isGrouped,
+      groupedSum: this.groupedSum,
       histogram:
         count > 0
           ? {
@@ -97,6 +111,7 @@ class Telemetry {
       this.metrics = new Map()
       for (const [category, description] of Object.entries(metrics)) {
         this.createMetric(category, description, 'count')
+        this.createMetric(category, description, 'groupedCount')
         this.createMetric(category, description, 'durations')
       }
     } catch (err) {
@@ -146,6 +161,10 @@ class Telemetry {
         for (const percentile of PERCENTILES) {
           output += `${metric.exportName}_bucket{le="${percentile}"} ${percentilesValues[percentile]} ${current.timestamp}\n`
         }
+      } else if (metric.type === 'counter' && metric.isGrouped) {
+        for (const [key, value] of Object.entries(current.groupedSum)) {
+          output += `${metric.exportName}${key} ${value} ${current.timestamp}\n`
+        }
       } else {
         output += `${metric.exportName} ${current.sum} ${current.timestamp}\n`
       }
@@ -166,6 +185,16 @@ class Telemetry {
   decreaseCount (category, amount = 1) {
     const metric = this.ensureMetric(category, 'count')
     metric.record(-1 * amount)
+  }
+
+  increaseCountWithKey (category, key, amount = 1) {
+    const metric = this.ensureMetric(category, 'grouped-count')
+    metric.recordWithKey(key, amount)
+  }
+
+  decreaseCountWithKey (category, key, amount = 1) {
+    const metric = this.ensureMetric(category, 'grouped-count')
+    metric.recordWithKey(key, -1 * amount)
   }
 
   async trackDuration (category, promise) {

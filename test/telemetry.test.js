@@ -218,4 +218,56 @@ t.test('Telemetry', async t => {
       )
     })
   })
+
+  t.test('increaseCount withKey', async t => {
+    t.test('should increase the count of a metric', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      telemetry.clear()
+      telemetry.createMetric('counter', 'COUNTER', 'grouped-count')
+
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+
+      t.equal(telemetry.export(), dedent`
+      # HELP counter_grouped_count_total COUNTER (grouped-count)
+      # TYPE counter_grouped_count_total counter
+      counter_grouped_count_total{id="123"} 3 now
+      counter_grouped_count_total{id="456"} 2 now`)
+    })
+
+    t.test('all metrics should be defined in the config file', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      t.throws(() => telemetry.increaseCountWithKey('unknown'), { message: 'Metric unknown not found' })
+    })
+  })
+
+  t.test('decrease withKey', async t => {
+    t.test('should increase the count of a metric', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      telemetry.clear()
+      telemetry.createMetric('counter', 'COUNTER', 'grouped-count')
+
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.decreaseCountWithKey('counter', '{id="123"}')
+      telemetry.decreaseCountWithKey('counter', '{id="123"}')
+
+      t.equal(telemetry.export(), dedent`
+      # HELP counter_grouped_count_total COUNTER (grouped-count)
+      # TYPE counter_grouped_count_total counter
+      counter_grouped_count_total{id="123"} 1 now
+      counter_grouped_count_total{id="456"} 2 now`)
+    })
+
+    t.test('all metrics should be defined in the config file', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      t.throws(() => telemetry.increaseCountWithKey('unknown'), { message: 'Metric unknown not found' })
+    })
+  })
 })
