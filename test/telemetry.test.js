@@ -219,7 +219,7 @@ t.test('Telemetry', async t => {
     })
   })
 
-  t.test('increaseCount withKey', async t => {
+  t.test('increase grouped count', async t => {
     t.test('should increase the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
@@ -246,7 +246,7 @@ t.test('Telemetry', async t => {
     })
   })
 
-  t.test('decrease withKey', async t => {
+  t.test('decrease grouped count', async t => {
     t.test('should increase the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
