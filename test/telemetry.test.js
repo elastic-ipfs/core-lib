@@ -236,6 +236,8 @@ t.test('Telemetry', async t => {
       # TYPE counter_grouped_count_total counter
       counter_grouped_count_total{id="123"} 3 now
       counter_grouped_count_total{id="456"} 2 now`)
+
+      t.equal(telemetry.export(), dedent`# no registered metrics`)
     })
 
     t.test('all metrics should be defined in the config file', async t => {
@@ -263,6 +265,8 @@ t.test('Telemetry', async t => {
       # TYPE counter_grouped_count_total counter
       counter_grouped_count_total{id="123"} 1 now
       counter_grouped_count_total{id="456"} 2 now`)
+
+      t.equal(telemetry.export(), dedent`# no registered metrics`)
     })
 
     t.test('all metrics should be defined in the config file', async t => {

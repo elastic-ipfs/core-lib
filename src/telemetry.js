@@ -67,7 +67,7 @@ class Aggregator {
     const value = {
       empty: (this.type === 'histogram' && count === 0) ||
         ((this.type === 'counter' && !this.isGrouped) && this.sum === 0) ||
-        ((this.type === 'counter' && this.isGrouped) && Object.keys(this.groupedSum) === 0),
+        ((this.type === 'counter' && this.isGrouped) && Object.keys(this.groupedSum).length === 0),
       sum: this.sum,
       isGrouped: this.isGrouped,
       groupedSum: this.groupedSum,
