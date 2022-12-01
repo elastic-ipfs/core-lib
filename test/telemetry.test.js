@@ -2,7 +2,7 @@
 import path from 'path'
 import t from 'tap'
 import dedent from 'dedent'
-import { Telemetry, dirname, METRIC_GROUPED_COUNT, METRIC_DURATIONS, METRIC_COUNT } from '../src/index.js'
+import { Telemetry, dirname, METRIC_GROUPED_COUNT, METRIC_DURATIONS, METRIC_COUNT, TYPE_GAUGE } from '../src/index.js'
 import * as helper from './helper/index.js'
 
 // process.env.NOW = 'now'
@@ -168,7 +168,7 @@ t.test('Telemetry', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
       telemetry.createMetric('c1', 'COUNTER', METRIC_DURATIONS)
-      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, 'gauge')
+      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, TYPE_GAUGE)
       telemetry.createMetric('c3', 'HISTOGRAM', METRIC_DURATIONS)
 
       t.equal(telemetry.export(), dedent`
@@ -182,7 +182,7 @@ t.test('Telemetry', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
       telemetry.createMetric('c1', 'COUNTER', METRIC_COUNT)
-      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, 'gauge')
+      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, TYPE_GAUGE)
       telemetry.createMetric('c3', 'HISTOGRAM', METRIC_DURATIONS)
 
       telemetry.increaseCount('c1', 1)

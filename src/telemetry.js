@@ -8,6 +8,10 @@ const METRIC_GROUPED_COUNT = 'grouped-count'
 const METRIC_DURATIONS = 'durations'
 const METRIC_COUNT = 'count'
 
+const TYPE_COUNTER = 'counter'
+const TYPE_HISTOGRAM = 'histogram'
+const TYPE_GAUGE = 'gauge'
+
 class Aggregator {
   constructor (category, description, metric, type) {
     this.tag = `${category}-${metric}`
@@ -18,9 +22,9 @@ class Aggregator {
     if (!type) {
       // set the type by the metric
       if (metric === METRIC_DURATIONS) {
-        this.type = 'histogram'
+        this.type = TYPE_HISTOGRAM
       } else {
-        this.type = 'counter'
+        this.type = TYPE_COUNTER
         this.exportName += '_total'
         this.isGrouped = metric === METRIC_GROUPED_COUNT
       }
@@ -42,7 +46,7 @@ class Aggregator {
   record (value) {
     this.sum += value
 
-    if (this.type === 'histogram') {
+    if (this.type === TYPE_HISTOGRAM) {
       this.histogram.recordValue(value)
     }
   }
@@ -65,9 +69,9 @@ class Aggregator {
     const { minNonZeroValue: min, maxValue: max, mean, stdDeviation: stdDev, totalCount: count } = this.histogram
 
     const value = {
-      empty: (this.type === 'histogram' && count === 0) ||
-        ((this.type === 'counter' && !this.isGrouped) && this.sum === 0) ||
-        ((this.type === 'counter' && this.isGrouped) && Object.keys(this.groupedSum).length === 0),
+      empty: (this.type === TYPE_HISTOGRAM && count === 0) ||
+        ((this.type === TYPE_COUNTER && !this.isGrouped) && this.sum === 0) ||
+        ((this.type === TYPE_COUNTER && this.isGrouped) && Object.keys(this.groupedSum).length === 0),
       sum: this.sum,
       isGrouped: this.isGrouped,
       groupedSum: this.groupedSum,
@@ -157,7 +161,7 @@ class Telemetry {
       output += `# HELP ${metric.exportName} ${metric.description}\n`
       output += `# TYPE ${metric.exportName} ${metric.type}\n`
 
-      if (metric.type === 'histogram') {
+      if (metric.type === TYPE_HISTOGRAM) {
         output += `${metric.exportName}_count ${current.histogram.count} ${current.timestamp}\n`
         output += `${metric.exportName}_sum ${current.sum} ${current.timestamp}\n`
 
@@ -165,7 +169,7 @@ class Telemetry {
         for (const percentile of PERCENTILES) {
           output += `${metric.exportName}_bucket{le="${percentile}"} ${percentilesValues[percentile]} ${current.timestamp}\n`
         }
-      } else if (metric.type === 'counter' && metric.isGrouped) {
+      } else if (metric.type === TYPE_COUNTER && metric.isGrouped) {
         for (const [key, value] of Object.entries(current.groupedSum)) {
           output += `${metric.exportName}${key} ${value} ${current.timestamp}\n`
         }
@@ -213,4 +217,4 @@ class Telemetry {
   }
 }
 
-export { Telemetry, METRIC_COUNT, METRIC_DURATIONS, METRIC_GROUPED_COUNT }
+export { Telemetry, METRIC_COUNT, METRIC_DURATIONS, METRIC_GROUPED_COUNT, TYPE_COUNTER, TYPE_HISTOGRAM, TYPE_GAUGE }
