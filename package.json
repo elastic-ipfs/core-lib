@@ -1,6 +1,6 @@
 {
   "name": "e-ipfs-core-lib",
-  "version": "0.3.0-beta-1",
+  "version": "0.3.0",
   "description": "E-IPFS core library",
   "license": "(Apache-2.0 AND MIT)",
   "homepage": "https://github.com/elastic-ipfs/core-lib",
@@ -8,7 +8,8 @@
     "test": "c8 --reporter=text --reporter=html tap test/*.test.js",
     "test:ci": "npm test && c8 check-coverage --lines 100 --functions 100 --branches 100",
     "format": "standard src test --fix",
-    "lint": "standard src test"
+    "lint": "standard src test | snazzy",
+    "prepare": "husky install"
   },
   "engines": {
     "node": "18.12"
@@ -28,11 +29,19 @@
     "xml-js": "^1.6.11"
   },
   "devDependencies": {
+    "@commitlint/cli": "^17.3.0",
+    "@commitlint/config-conventional": "^17.3.0",
     "c8": "^7.12.0",
     "dedent": "^0.7.0",
+    "husky": "^8.0.2",
+    "lint-staged": "^13.0.4",
+    "snazzy": "^9.0.0",
     "split2": "^4.1.0",
     "standard": "^17.0.0",
     "tap": "^16.3.2"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": "standard --cache --fix"
   },
   "type": "module",
   "exports": "./src/index.js",
