@@ -2,7 +2,7 @@
 import path from 'path'
 import t from 'tap'
 import dedent from 'dedent'
-import { Telemetry, dirname } from '../src/index.js'
+import { Telemetry, dirname, METRIC_GROUPED_COUNT, METRIC_DURATIONS, METRIC_COUNT, TYPE_GAUGE } from '../src/index.js'
 import * as helper from './helper/index.js'
 
 // process.env.NOW = 'now'
@@ -49,7 +49,7 @@ t.test('Telemetry', async t => {
     t.test('should increase the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
-      telemetry.createMetric('counter', 'COUNTER', 'count')
+      telemetry.createMetric('counter', 'COUNTER', METRIC_COUNT)
 
       telemetry.increaseCount('counter')
 
@@ -69,7 +69,7 @@ t.test('Telemetry', async t => {
     t.test('should decrease the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
-      telemetry.createMetric('counter', 'COUNTER', 'count')
+      telemetry.createMetric('counter', 'COUNTER', METRIC_COUNT)
 
       telemetry.decreaseCount('counter')
 
@@ -89,7 +89,7 @@ t.test('Telemetry', async t => {
     t.test('should track a function', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
-      telemetry.createMetric('tracking1', 'GAUGE', 'durations')
+      telemetry.createMetric('tracking1', 'GAUGE', METRIC_DURATIONS)
 
       await telemetry.trackDuration('tracking1', async () => { return 1 })
 
@@ -127,7 +127,7 @@ t.test('Telemetry', async t => {
     t.test('should handle a failing function', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
-      telemetry.createMetric('trackingboom', 'HISTOGRAM', 'durations')
+      telemetry.createMetric('trackingboom', 'HISTOGRAM', METRIC_DURATIONS)
 
       await telemetry.trackDuration('trackingboom', async () => { throw new Error('BOOM') })
 
@@ -167,9 +167,9 @@ t.test('Telemetry', async t => {
     t.test('should get the metrics result with registered metrics', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
-      telemetry.createMetric('c1', 'COUNTER', 'durations')
-      telemetry.createMetric('c2', 'GAUGE', 'count', 'gauge')
-      telemetry.createMetric('c3', 'HISTOGRAM', 'durations')
+      telemetry.createMetric('c1', 'COUNTER', METRIC_DURATIONS)
+      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, TYPE_GAUGE)
+      telemetry.createMetric('c3', 'HISTOGRAM', METRIC_DURATIONS)
 
       t.equal(telemetry.export(), dedent`
       # HELP c2_count GAUGE (count)
@@ -181,13 +181,13 @@ t.test('Telemetry', async t => {
     t.test('should get the metrics result with registered metrics and values', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       telemetry.clear()
-      telemetry.createMetric('c1', 'COUNTER', 'count')
-      telemetry.createMetric('c2', 'GAUGE', 'count', 'gauge')
-      telemetry.createMetric('c3', 'HISTOGRAM', 'durations')
+      telemetry.createMetric('c1', 'COUNTER', METRIC_COUNT)
+      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, TYPE_GAUGE)
+      telemetry.createMetric('c3', 'HISTOGRAM', METRIC_DURATIONS)
 
       telemetry.increaseCount('c1', 1)
       telemetry.increaseCount('c2', 2)
-      telemetry.ensureMetric('c3', 'durations').record(3)
+      telemetry.ensureMetric('c3', METRIC_DURATIONS).record(3)
 
       t.equal(telemetry.export(), dedent`
       # HELP c1_count_total COUNTER (count)
@@ -216,6 +216,62 @@ t.test('Telemetry', async t => {
       c3_durations_bucket{le="99.99"} 3 now
       c3_durations_bucket{le="99.999"} 3 now`.trim()
       )
+    })
+  })
+
+  t.test('increase grouped count', async t => {
+    t.test('should increase the count of a metric', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      telemetry.clear()
+      telemetry.createMetric('counter', 'COUNTER', METRIC_GROUPED_COUNT)
+
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+
+      t.equal(telemetry.export(), dedent`
+      # HELP counter_grouped_count_total COUNTER (grouped-count)
+      # TYPE counter_grouped_count_total counter
+      counter_grouped_count_total{id="123"} 3 now
+      counter_grouped_count_total{id="456"} 2 now`)
+
+      t.equal(telemetry.export(), dedent`# no registered metrics`)
+    })
+
+    t.test('all metrics should be defined in the config file', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      t.throws(() => telemetry.increaseCountWithKey('unknown'), { message: 'Metric unknown not found' })
+    })
+  })
+
+  t.test('decrease grouped count', async t => {
+    t.test('should increase the count of a metric', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      telemetry.clear()
+      telemetry.createMetric('counter', 'COUNTER', METRIC_GROUPED_COUNT)
+
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.increaseCountWithKey('counter', '{id="456"}')
+      telemetry.increaseCountWithKey('counter', '{id="123"}')
+      telemetry.decreaseCountWithKey('counter', '{id="123"}')
+      telemetry.decreaseCountWithKey('counter', '{id="123"}')
+
+      t.equal(telemetry.export(), dedent`
+      # HELP counter_grouped_count_total COUNTER (grouped-count)
+      # TYPE counter_grouped_count_total counter
+      counter_grouped_count_total{id="123"} 1 now
+      counter_grouped_count_total{id="456"} 2 now`)
+
+      t.equal(telemetry.export(), dedent`# no registered metrics`)
+    })
+
+    t.test('all metrics should be defined in the config file', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      t.throws(() => telemetry.increaseCountWithKey('unknown'), { message: 'Metric unknown not found' })
     })
   })
 })

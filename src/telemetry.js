@@ -1,9 +1,16 @@
-
 import { readFileSync } from 'fs'
 import { load as ymlLoad } from 'js-yaml'
 import * as hdr from 'hdr-histogram-js'
 
 const PERCENTILES = [0.001, 0.01, 0.1, 1, 2.5, 10, 25, 50, 75, 90, 97.5, 99, 99.9, 99.99, 99.999]
+
+const METRIC_GROUPED_COUNT = 'grouped-count'
+const METRIC_DURATIONS = 'durations'
+const METRIC_COUNT = 'count'
+
+const TYPE_COUNTER = 'counter'
+const TYPE_HISTOGRAM = 'histogram'
+const TYPE_GAUGE = 'gauge'
 
 class Aggregator {
   constructor (category, description, metric, type) {
@@ -14,16 +21,18 @@ class Aggregator {
     // type is optional
     if (!type) {
       // set the type by the metric
-      if (metric === 'durations') {
-        this.type = 'histogram'
+      if (metric === METRIC_DURATIONS) {
+        this.type = TYPE_HISTOGRAM
       } else {
-        this.type = 'counter'
+        this.type = TYPE_COUNTER
         this.exportName += '_total'
+        this.isGrouped = metric === METRIC_GROUPED_COUNT
       }
     } else {
       this.type = type
     }
 
+    this.groupedSum = {}
     this.sum = 0
     hdr.initWebAssemblySync()
     this.histogram = hdr.build({
@@ -37,13 +46,22 @@ class Aggregator {
   record (value) {
     this.sum += value
 
-    if (this.type === 'histogram') {
+    if (this.type === TYPE_HISTOGRAM) {
       this.histogram.recordValue(value)
+    }
+  }
+
+  recordWithKey (key, value) {
+    if (!this.groupedSum[key]) {
+      this.groupedSum[key] = value
+    } else {
+      this.groupedSum[key] += value
     }
   }
 
   reset () {
     this.sum = 0
+    this.groupedSum = {}
     this.histogram.reset()
   }
 
@@ -51,8 +69,12 @@ class Aggregator {
     const { minNonZeroValue: min, maxValue: max, mean, stdDeviation: stdDev, totalCount: count } = this.histogram
 
     const value = {
-      empty: (this.type === 'histogram' && count === 0) || (this.type === 'counter' && this.sum === 0),
+      empty: (this.type === TYPE_HISTOGRAM && count === 0) ||
+        ((this.type === TYPE_COUNTER && !this.isGrouped) && this.sum === 0) ||
+        ((this.type === TYPE_COUNTER && this.isGrouped) && Object.keys(this.groupedSum).length === 0),
       sum: this.sum,
+      isGrouped: this.isGrouped,
+      groupedSum: this.groupedSum,
       histogram:
         count > 0
           ? {
@@ -96,8 +118,9 @@ class Telemetry {
       // Create metrics
       this.metrics = new Map()
       for (const [category, description] of Object.entries(metrics)) {
-        this.createMetric(category, description, 'count')
-        this.createMetric(category, description, 'durations')
+        this.createMetric(category, description, METRIC_COUNT)
+        this.createMetric(category, description, METRIC_GROUPED_COUNT)
+        this.createMetric(category, description, METRIC_DURATIONS)
       }
     } catch (err) {
       logger.error({ err }, 'error in telemetry constructor')
@@ -138,13 +161,17 @@ class Telemetry {
       output += `# HELP ${metric.exportName} ${metric.description}\n`
       output += `# TYPE ${metric.exportName} ${metric.type}\n`
 
-      if (metric.type === 'histogram') {
+      if (metric.type === TYPE_HISTOGRAM) {
         output += `${metric.exportName}_count ${current.histogram.count} ${current.timestamp}\n`
         output += `${metric.exportName}_sum ${current.sum} ${current.timestamp}\n`
 
         const percentilesValues = current.histogram.percentiles
         for (const percentile of PERCENTILES) {
           output += `${metric.exportName}_bucket{le="${percentile}"} ${percentilesValues[percentile]} ${current.timestamp}\n`
+        }
+      } else if (metric.type === TYPE_COUNTER && metric.isGrouped) {
+        for (const [key, value] of Object.entries(current.groupedSum)) {
+          output += `${metric.exportName}${key} ${value} ${current.timestamp}\n`
         }
       } else {
         output += `${metric.exportName} ${current.sum} ${current.timestamp}\n`
@@ -159,17 +186,27 @@ class Telemetry {
   }
 
   increaseCount (category, amount = 1) {
-    const metric = this.ensureMetric(category, 'count')
+    const metric = this.ensureMetric(category, METRIC_COUNT)
     metric.record(amount)
   }
 
   decreaseCount (category, amount = 1) {
-    const metric = this.ensureMetric(category, 'count')
+    const metric = this.ensureMetric(category, METRIC_COUNT)
     metric.record(-1 * amount)
   }
 
+  increaseCountWithKey (category, key, amount = 1) {
+    const metric = this.ensureMetric(category, METRIC_GROUPED_COUNT)
+    metric.recordWithKey(key, amount)
+  }
+
+  decreaseCountWithKey (category, key, amount = 1) {
+    const metric = this.ensureMetric(category, METRIC_GROUPED_COUNT)
+    metric.recordWithKey(key, -1 * amount)
+  }
+
   async trackDuration (category, promise) {
-    const metric = this.ensureMetric(category, 'durations')
+    const metric = this.ensureMetric(category, METRIC_DURATIONS)
     const startTime = process.hrtime.bigint()
 
     try {
@@ -180,4 +217,4 @@ class Telemetry {
   }
 }
 
-export { Telemetry }
+export { Telemetry, METRIC_COUNT, METRIC_DURATIONS, METRIC_GROUPED_COUNT, TYPE_COUNTER, TYPE_HISTOGRAM, TYPE_GAUGE }
