@@ -1,14 +1,21 @@
-
 import path from 'path'
+import { promisify } from 'util'
 import t from 'tap'
 import dedent from 'dedent'
-import { Telemetry, dirname, METRIC_GROUPED_COUNT, METRIC_DURATIONS, METRIC_COUNT, TYPE_GAUGE } from '../src/index.js'
+import {
+  Telemetry,
+  dirname
+} from '../src/index.js'
 import * as helper from './helper/index.js'
 
 // process.env.NOW = 'now'
 
+const setTimeoutAsync = promisify(setTimeout)
+
 t.test('Telemetry', async t => {
   const configFile = path.join(dirname(import.meta.url), 'fixtures/metrics.yml')
+  const noMetricConfigFile = path.join(dirname(import.meta.url), 'fixtures/no-metrics.yml')
+  const noCountMetricConfigFile = path.join(dirname(import.meta.url), 'fixtures/no-count-metrics.yml')
   let logger
 
   const now = Date.now
@@ -28,6 +35,19 @@ t.test('Telemetry', async t => {
     t.test('should create a new telemetry instance', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       t.ok(telemetry)
+
+      t.equal(telemetry.allRegistry.getSingleMetric('s3_request_count').constructor.name, 'Counter')
+      t.equal(telemetry.countRegistry.getSingleMetric('s3_request_count').constructor.name, 'Counter')
+      t.equal(telemetry.allRegistry.getSingleMetric('dynamo_request_count').constructor.name, 'Counter')
+      t.equal(telemetry.countRegistry.getSingleMetric('dynamo_request_count').constructor.name, 'Counter')
+      t.equal(telemetry.allRegistry.getSingleMetric('bitswap_request_per_connections_grouped_count').constructor.name, 'Counter')
+      t.equal(telemetry.groupedCountRegistry.getSingleMetric('bitswap_request_per_connections_grouped_count').constructor.name, 'Counter')
+      t.equal(telemetry.allRegistry.getSingleMetric('bitswap_connections_duration_durations').constructor.name, 'Histogram')
+      t.equal(telemetry.durationsRegistry.getSingleMetric('bitswap_connections_duration_durations').constructor.name, 'Histogram')
+      t.equal(telemetry.allRegistry.getSingleMetric('bitswap_event_loop_utilization').constructor.name, 'Gauge')
+      t.equal(telemetry.gaugeRegistry.getSingleMetric('bitswap_event_loop_utilization').constructor.name, 'Gauge')
+      t.equal(telemetry.allRegistry.getSingleMetric('bitswap_total_connections').constructor.name, 'Gauge')
+      t.equal(telemetry.gaugeRegistry.getSingleMetric('bitswap_total_connections').constructor.name, 'Gauge')
     })
 
     t.test('should get error missing config file', async t => {
@@ -39,7 +59,10 @@ t.test('Telemetry', async t => {
     })
 
     t.test('should get error on invalid config file', async t => {
-      t.throws(() => new Telemetry({ configFile: '/not-a-file', logger }), { message: 'Unable to create a telemetry instance' })
+      t.throws(() => new Telemetry({
+        configFile: '/not-a-file',
+        logger
+      }), { message: 'Unable to create a telemetry instance' })
       t.equal(logger.messages.error.length, 1)
       t.equal(logger.messages.error[0][1], 'error in telemetry constructor')
     })
@@ -48,15 +71,40 @@ t.test('Telemetry', async t => {
   t.test('increaseCount', async t => {
     t.test('should increase the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('counter', 'COUNTER', METRIC_COUNT)
+      telemetry.increaseCount('s3-request-count')
+      telemetry.increaseCount('s3-request-count', 10)
 
-      telemetry.increaseCount('counter')
+      t.equal((await telemetry.countRegistry.metrics()).trim(), dedent`
+      # HELP s3_request_count AWS S3 requests
+      # TYPE s3_request_count counter
+      s3_request_count 11
+      
+      # HELP dynamo_request_count AWS DynamoDB requests
+      # TYPE dynamo_request_count counter
+      dynamo_request_count 0
+      `.trim())
 
-      t.equal(telemetry.export(), dedent`
-      # HELP counter_count_total COUNTER (count)
-      # TYPE counter_count_total counter
-      counter_count_total 1 now`)
+      t.equal((await telemetry.countRegistry.metrics()).trim(), dedent`
+      # HELP s3_request_count AWS S3 requests
+      # TYPE s3_request_count counter
+      s3_request_count 11
+      
+      # HELP dynamo_request_count AWS DynamoDB requests
+      # TYPE dynamo_request_count counter
+      dynamo_request_count 0
+      `.trim())
+
+      telemetry.resetCounters()
+
+      t.equal((await telemetry.countRegistry.metrics()).trim(), dedent`
+      # HELP s3_request_count AWS S3 requests
+      # TYPE s3_request_count counter
+      s3_request_count 0
+      
+      # HELP dynamo_request_count AWS DynamoDB requests
+      # TYPE dynamo_request_count counter
+      dynamo_request_count 0
+      `.trim())
     })
 
     t.test('all metrics should be defined in the config file', async t => {
@@ -65,58 +113,122 @@ t.test('Telemetry', async t => {
     })
   })
 
-  t.test('decreaseCount', async t => {
-    t.test('should decrease the count of a metric', async t => {
+  t.test('increaseGroupedCount', async t => {
+    t.test('should increase the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('counter', 'COUNTER', METRIC_COUNT)
+      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['GET', '200'])
+      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['GET', '200'], 5)
+      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['POST', '200'], 8)
+      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['POST', '400'], 10)
 
-      telemetry.decreaseCount('counter')
+      t.equal((await telemetry.groupedCountRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_request_per_connections_grouped_count BitSwap Request Per Connnection
+      # TYPE bitswap_request_per_connections_grouped_count counter
+      bitswap_request_per_connections_grouped_count{method="GET",status="200"} 6
+      bitswap_request_per_connections_grouped_count{method="POST",status="200"} 8
+      bitswap_request_per_connections_grouped_count{method="POST",status="400"} 10
+      `.trim())
 
-      t.equal(telemetry.export(), dedent`
-      # HELP counter_count_total COUNTER (count)
-      # TYPE counter_count_total counter
-      counter_count_total -1 now`)
+      t.equal((await telemetry.groupedCountRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_request_per_connections_grouped_count BitSwap Request Per Connnection
+      # TYPE bitswap_request_per_connections_grouped_count counter
+      bitswap_request_per_connections_grouped_count{method="GET",status="200"} 6
+      bitswap_request_per_connections_grouped_count{method="POST",status="200"} 8
+      bitswap_request_per_connections_grouped_count{method="POST",status="400"} 10
+      `.trim())
+
+      telemetry.resetCounters()
+
+      t.equal((await telemetry.groupedCountRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_request_per_connections_grouped_count BitSwap Request Per Connnection
+      # TYPE bitswap_request_per_connections_grouped_count counter
+      `.trim())
     })
 
     t.test('all metrics should be defined in the config file', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      t.throws(() => telemetry.decreaseCount('unknown'), { message: 'Metric unknown not found' })
+      t.throws(() => telemetry.increaseGroupedCount('unknown'), { message: 'Metric unknown not found' })
+    })
+  })
+
+  t.test('update gauge values', async t => {
+    t.test('should increase the gouge of a metric', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      telemetry.increaseGauge('bitswap-total-connections')
+      telemetry.increaseGauge('bitswap-total-connections', 10)
+
+      t.equal((await telemetry.gaugeRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_event_loop_utilization BitSwap Event Loop Utilization
+      # TYPE bitswap_event_loop_utilization gauge
+      bitswap_event_loop_utilization 0
+      
+      # HELP bitswap_total_connections BitSwap Total Connections
+      # TYPE bitswap_total_connections gauge
+      bitswap_total_connections 11
+      `.trim())
+      telemetry.decreaseGauge('bitswap-total-connections', 5)
+
+      t.equal((await telemetry.gaugeRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_event_loop_utilization BitSwap Event Loop Utilization
+      # TYPE bitswap_event_loop_utilization gauge
+      bitswap_event_loop_utilization 0
+      
+      # HELP bitswap_total_connections BitSwap Total Connections
+      # TYPE bitswap_total_connections gauge
+      bitswap_total_connections 6
+      `.trim())
+
+      telemetry.setGauge('bitswap-total-connections', 21)
+
+      t.equal((await telemetry.gaugeRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_event_loop_utilization BitSwap Event Loop Utilization
+      # TYPE bitswap_event_loop_utilization gauge
+      bitswap_event_loop_utilization 0
+
+      # HELP bitswap_total_connections BitSwap Total Connections
+      # TYPE bitswap_total_connections gauge
+      bitswap_total_connections 21
+      `.trim())
+
+      telemetry.resetAll()
+
+      t.equal((await telemetry.gaugeRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_event_loop_utilization BitSwap Event Loop Utilization
+      # TYPE bitswap_event_loop_utilization gauge
+      bitswap_event_loop_utilization 0
+      
+      # HELP bitswap_total_connections BitSwap Total Connections
+      # TYPE bitswap_total_connections gauge
+      bitswap_total_connections 0
+      `.trim())
+    })
+
+    t.test('all metrics should be defined in the config file', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      t.throws(() => telemetry.increaseGauge('unknown'), { message: 'Metric unknown not found' })
+      t.throws(() => telemetry.decreaseGauge('unknown'), { message: 'Metric unknown not found' })
+      t.throws(() => telemetry.setGauge('unknown'), { message: 'Metric unknown not found' })
     })
   })
 
   t.test('trackDuration', async t => {
     t.test('should track a function', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('tracking1', 'GAUGE', METRIC_DURATIONS)
 
-      await telemetry.trackDuration('tracking1', async () => { return 1 })
-
-      const output = telemetry.export()
-        .replace(/tracking1_durations_sum [\d.]+ now/, 'tracking1_durations_sum time now')
-        .replace(/} \d+ now/mg, '} 111 now')
-
-      t.equal(output, dedent`
-      # HELP tracking1_durations GAUGE (durations)
-      # TYPE tracking1_durations histogram
-      tracking1_durations_count 1 now
-      tracking1_durations_sum time now
-      tracking1_durations_bucket{le="0.001"} 111 now
-      tracking1_durations_bucket{le="0.01"} 111 now
-      tracking1_durations_bucket{le="0.1"} 111 now
-      tracking1_durations_bucket{le="1"} 111 now
-      tracking1_durations_bucket{le="2.5"} 111 now
-      tracking1_durations_bucket{le="10"} 111 now
-      tracking1_durations_bucket{le="25"} 111 now
-      tracking1_durations_bucket{le="50"} 111 now
-      tracking1_durations_bucket{le="75"} 111 now
-      tracking1_durations_bucket{le="90"} 111 now
-      tracking1_durations_bucket{le="97.5"} 111 now
-      tracking1_durations_bucket{le="99"} 111 now
-      tracking1_durations_bucket{le="99.9"} 111 now
-      tracking1_durations_bucket{le="99.99"} 111 now
-      tracking1_durations_bucket{le="99.999"} 111 now`)
+      await Promise.all([
+        await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(100) }),
+        await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(200) }),
+        await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(300) })
+      ])
+      t.ok((await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count 3'))
+      await Promise.all([
+        await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(100) }),
+        await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(200) }),
+        await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(300) })
+      ])
+      t.ok((await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count 6'))
+      telemetry.resetAll()
+      t.ok(!(await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count'))
     })
 
     t.test('all metrics should be defined in the config file', async t => {
@@ -126,152 +238,42 @@ t.test('Telemetry', async t => {
 
     t.test('should handle a failing function', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('trackingboom', 'HISTOGRAM', METRIC_DURATIONS)
+      await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { throw new Error('BOOM') })
 
-      await telemetry.trackDuration('trackingboom', async () => { throw new Error('BOOM') })
-
-      const output = telemetry.export()
-        .replace(/trackingboom_durations_sum [\d.]+ now/, 'trackingboom_durations_sum time now')
-
-      t.equal(output, dedent`
-      # HELP trackingboom_durations HISTOGRAM (durations)
-      # TYPE trackingboom_durations histogram
-      trackingboom_durations_count 1 now
-      trackingboom_durations_sum time now
-      trackingboom_durations_bucket{le="0.001"} 0 now
-      trackingboom_durations_bucket{le="0.01"} 0 now
-      trackingboom_durations_bucket{le="0.1"} 0 now
-      trackingboom_durations_bucket{le="1"} 0 now
-      trackingboom_durations_bucket{le="2.5"} 0 now
-      trackingboom_durations_bucket{le="10"} 0 now
-      trackingboom_durations_bucket{le="25"} 0 now
-      trackingboom_durations_bucket{le="50"} 0 now
-      trackingboom_durations_bucket{le="75"} 0 now
-      trackingboom_durations_bucket{le="90"} 0 now
-      trackingboom_durations_bucket{le="97.5"} 0 now
-      trackingboom_durations_bucket{le="99"} 0 now
-      trackingboom_durations_bucket{le="99.9"} 0 now
-      trackingboom_durations_bucket{le="99.99"} 0 now
-      trackingboom_durations_bucket{le="99.999"} 0 now`)
+      t.ok((await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count 1'))
     })
   })
 
-  t.test('export', async t => {
-    t.test('should get the metrics result with no registered metrics', async t => {
+  t.test('export values', async t => {
+    t.test('should export all values', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      t.equal(telemetry.export(), '# no registered metrics')
-    })
+      telemetry.increaseGauge('bitswap-total-connections')
+      telemetry.increaseGauge('bitswap-total-connections', 10)
+      await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { throw new Error('BOOM') })
+      telemetry.increaseCount('s3-request-count', 10)
+      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['GET', '200'])
 
-    t.test('should get the metrics result with registered metrics', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('c1', 'COUNTER', METRIC_DURATIONS)
-      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, TYPE_GAUGE)
-      telemetry.createMetric('c3', 'HISTOGRAM', METRIC_DURATIONS)
+      const result = await telemetry.export()
 
-      t.equal(telemetry.export(), dedent`
-      # HELP c2_count GAUGE (count)
-      # TYPE c2_count gauge
-      c2_count 0 now`.trim()
-      )
-    })
-
-    t.test('should get the metrics result with registered metrics and values', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('c1', 'COUNTER', METRIC_COUNT)
-      telemetry.createMetric('c2', 'GAUGE', METRIC_COUNT, TYPE_GAUGE)
-      telemetry.createMetric('c3', 'HISTOGRAM', METRIC_DURATIONS)
-
-      telemetry.increaseCount('c1', 1)
-      telemetry.increaseCount('c2', 2)
-      telemetry.ensureMetric('c3', METRIC_DURATIONS).record(3)
-
-      t.equal(telemetry.export(), dedent`
-      # HELP c1_count_total COUNTER (count)
-      # TYPE c1_count_total counter
-      c1_count_total 1 now
-      # HELP c2_count GAUGE (count)
-      # TYPE c2_count gauge
-      c2_count 2 now
-      # HELP c3_durations HISTOGRAM (durations)
-      # TYPE c3_durations histogram
-      c3_durations_count 1 now
-      c3_durations_sum 3 now
-      c3_durations_bucket{le="0.001"} 3 now
-      c3_durations_bucket{le="0.01"} 3 now
-      c3_durations_bucket{le="0.1"} 3 now
-      c3_durations_bucket{le="1"} 3 now
-      c3_durations_bucket{le="2.5"} 3 now
-      c3_durations_bucket{le="10"} 3 now
-      c3_durations_bucket{le="25"} 3 now
-      c3_durations_bucket{le="50"} 3 now
-      c3_durations_bucket{le="75"} 3 now
-      c3_durations_bucket{le="90"} 3 now
-      c3_durations_bucket{le="97.5"} 3 now
-      c3_durations_bucket{le="99"} 3 now
-      c3_durations_bucket{le="99.9"} 3 now
-      c3_durations_bucket{le="99.99"} 3 now
-      c3_durations_bucket{le="99.999"} 3 now`.trim()
-      )
+      t.ok(result.includes('s3_request_count 10'))
+      t.ok(result.includes('dynamo_request_count 0'))
+      t.ok(result.includes('bitswap_request_per_connections_grouped_count{method="GET",status="200"} 1'))
+      t.ok(result.includes('bitswap_connections_duration_durations_count 1'))
+      t.ok(result.includes('bitswap_event_loop_utilization 0'))
+      t.ok(result.includes('bitswap_total_connections 11'))
     })
   })
 
-  t.test('increase grouped count', async t => {
-    t.test('should increase the count of a metric', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('counter', 'COUNTER', METRIC_GROUPED_COUNT)
+  t.test('should create a new telemetry with no metrics', async t => {
+    const telemetry = new Telemetry({ configFile: noMetricConfigFile, logger })
 
-      telemetry.increaseCountWithKey('counter', '{id="123"}')
-      telemetry.increaseCountWithKey('counter', '{id="456"}')
-      telemetry.increaseCountWithKey('counter', '{id="123"}')
-      telemetry.increaseCountWithKey('counter', '{id="456"}')
-      telemetry.increaseCountWithKey('counter', '{id="123"}')
-
-      t.equal(telemetry.export(), dedent`
-      # HELP counter_grouped_count_total COUNTER (grouped-count)
-      # TYPE counter_grouped_count_total counter
-      counter_grouped_count_total{id="123"} 3 now
-      counter_grouped_count_total{id="456"} 2 now`)
-
-      t.equal(telemetry.export(), dedent`# no registered metrics`)
-    })
-
-    t.test('all metrics should be defined in the config file', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
-      t.throws(() => telemetry.increaseCountWithKey('unknown'), { message: 'Metric unknown not found' })
-    })
+    t.same(Object.keys(telemetry.allRegistry._metrics), ['s3_request_count',
+      'dynamo_request_count'])
   })
 
-  t.test('decrease grouped count', async t => {
-    t.test('should increase the count of a metric', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
-      telemetry.clear()
-      telemetry.createMetric('counter', 'COUNTER', METRIC_GROUPED_COUNT)
+  t.test('should create a new telemetry with no metrics', async t => {
+    const telemetry = new Telemetry({ configFile: noCountMetricConfigFile, logger })
 
-      telemetry.increaseCountWithKey('counter', '{id="123"}')
-      telemetry.increaseCountWithKey('counter', '{id="456"}')
-      telemetry.increaseCountWithKey('counter', '{id="123"}')
-      telemetry.increaseCountWithKey('counter', '{id="456"}')
-      telemetry.increaseCountWithKey('counter', '{id="123"}')
-      telemetry.decreaseCountWithKey('counter', '{id="123"}')
-      telemetry.decreaseCountWithKey('counter', '{id="123"}')
-
-      t.equal(telemetry.export(), dedent`
-      # HELP counter_grouped_count_total COUNTER (grouped-count)
-      # TYPE counter_grouped_count_total counter
-      counter_grouped_count_total{id="123"} 1 now
-      counter_grouped_count_total{id="456"} 2 now`)
-
-      t.equal(telemetry.export(), dedent`# no registered metrics`)
-    })
-
-    t.test('all metrics should be defined in the config file', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
-      t.throws(() => telemetry.increaseCountWithKey('unknown'), { message: 'Metric unknown not found' })
-    })
+    t.same(Object.keys(telemetry.allRegistry._metrics), ['bitswap_connections_duration_durations'])
   })
 })

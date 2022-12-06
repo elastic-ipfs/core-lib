@@ -1,0 +1,10 @@
+---
+component: bitswap-peer
+metrics:
+  count:
+    s3-request-count:
+      description: AWS S3 requests
+    dynamo-request-count:
+      description: AWS DynamoDB requests
+version: 0.1.0
+buildDate: "20220307.1423"

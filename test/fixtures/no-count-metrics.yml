@@ -1,0 +1,8 @@
+---
+component: bitswap-peer
+metrics:
+  durations:
+    bitswap-connections-duration-durations:
+      description: BitSwap Connnection Duration
+version: 0.1.0
+buildDate: "20220307.1423"

@@ -1,8 +1,24 @@
 ---
 component: bitswap-peer
 metrics:
-  bitswap-total-connections: BitSwap Total Connections
-  s3-request: AWS S3 requests
-  dynamo-request: AWS DynamoDB requests
+  count:
+    s3-request-count:
+      description: AWS S3 requests
+    dynamo-request-count:
+      description: AWS DynamoDB requests
+  groupedCount:
+    bitswap-request-per-connections-grouped-count:
+      description: BitSwap Request Per Connnection
+      labels:
+        - method
+        - status
+  durations:
+    bitswap-connections-duration-durations:
+      description: BitSwap Connnection Duration
+  gauge:
+    bitswap-event-loop-utilization:
+      description: BitSwap Event Loop Utilization
+    bitswap-total-connections:
+      description: BitSwap Total Connections
 version: 0.1.0
 buildDate: "20220307.1423"
