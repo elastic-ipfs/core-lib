@@ -1,6 +1,6 @@
 {
   "name": "e-ipfs-core-lib",
-  "version": "0.3.0",
+  "version": "0.4.0-beta-01",
   "description": "E-IPFS core library",
   "license": "(Apache-2.0 AND MIT)",
   "homepage": "https://github.com/elastic-ipfs/core-lib",

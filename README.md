@@ -37,17 +37,12 @@ const configFile = path.join(dirname(import.meta.url), '../metrics.yml')
 const telemetry = new Telemetry({ configFile })
 telemetry.increaseCount('bitswap-total-connections', 2)
 
-const result = telemetry.export()
+const result = await telemetry.export()
 console.log(result)
+telemetry.resetCount()
 ```
 
 #### Telemetry instance methods
-* clear: Clear the metrics
-* createMetric(category, description, metric, type): Create a new metric
-  * category: String - The given name of the category
-  * description: String - The category description
-  * metric: METRIC_COUNT | METRIC_DURATIONS | METRIC_GROUPED_COUNT - The metric defined
-  * type: null | TYPE_GAUGE - The type of the metric. If not passed the value is defined based on the `metric` attribute. 
 * export: Export the metrics in `prometheus` format
   ```
     # HELP counter_grouped_count_total COUNTER (grouped-count)
@@ -55,34 +50,27 @@ console.log(result)
     counter_grouped_count_total{id="123"} 1 now
     counter_grouped_count_total{id="456"} 2 now
     ```
+* resetAll(): Reset all metrics
+* resetCounters(): Reset count and groupedCount metrics
+* async export(): Export file in Prometheus format 
 * increaseCount(category, amount = 1): Increase the count for a category
   * category: String - The given name of the category
+* increaseGroupedCount(category, labels: Array, amount = 1): Increase the count for a key in a category
+  * category: String - The given name of the category
+  * labels: Array<String> - The labels of the metric (eg. ['GET', 404])
   * amount: Number (Default 1) - The amount to add to the metric
-* decreaseCount(category, amount = 1): Decrease the count for a category
+* increaseGauge(category, amount = 1): Increase the gauge for a category
   * category: String - The given name of the category
-  * amount: Number (Default 1) - The amount to remove from the metric
-* increaseCountWithKey(category, key, amount = 1): Increase the count for a key in a category
-  * category: String - The given name of the category
-  * key: String - The key of the metric
   * amount: Number (Default 1) - The amount to add to the metric
-* decreaseCountWithKey(category, key, amount = 1): Decrease the count for a key in a category
+* decreaseGauge(category, amount = 1): Increase the gauge for a category
   * category: String - The given name of the category
-  * key: String - The key of the metric
-  * amount: Number (Default 1) - The amount to remove from the metric
+  * amount: Number (Default 1) - The amount to add to the metric
+* setGauge(category, value): Set the gauge for a category
+  * category: String - The given name of the category
+  * value: Number - The value to set the metric
 * trackDuration(category, promise): Track the duration of an async call
   * category: String - The given name of the category
   * promise: Promise - The function to be tracked
-
-#### Metrics and types constants
-
-The constants below are exported
-
-* METRIC_COUNT
-* METRIC_DURATIONS
-* METRIC_GROUPED_COUNT
-* TYPE_COUNTER
-* TYPE_HISTOGRAM
-* TYPE_GAUGE
 
 ### Utils
 #### dirname
