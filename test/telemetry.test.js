@@ -40,8 +40,8 @@ t.test('Telemetry', async t => {
       t.equal(telemetry.countRegistry.getSingleMetric('s3_request_count').constructor.name, 'Counter')
       t.equal(telemetry.allRegistry.getSingleMetric('dynamo_request_count').constructor.name, 'Counter')
       t.equal(telemetry.countRegistry.getSingleMetric('dynamo_request_count').constructor.name, 'Counter')
-      t.equal(telemetry.allRegistry.getSingleMetric('bitswap_request_per_connections_grouped_count').constructor.name, 'Counter')
-      t.equal(telemetry.groupedCountRegistry.getSingleMetric('bitswap_request_per_connections_grouped_count').constructor.name, 'Counter')
+      t.equal(telemetry.allRegistry.getSingleMetric('bitswap_request_per_connections_label_count').constructor.name, 'Counter')
+      t.equal(telemetry.labelCountRegistry.getSingleMetric('bitswap_request_per_connections_label_count').constructor.name, 'Counter')
       t.equal(telemetry.allRegistry.getSingleMetric('bitswap_connections_duration_durations').constructor.name, 'Histogram')
       t.equal(telemetry.durationsRegistry.getSingleMetric('bitswap_connections_duration_durations').constructor.name, 'Histogram')
       t.equal(telemetry.allRegistry.getSingleMetric('bitswap_event_loop_utilization').constructor.name, 'Gauge')
@@ -113,41 +113,41 @@ t.test('Telemetry', async t => {
     })
   })
 
-  t.test('increaseGroupedCount', async t => {
+  t.test('increaseLabelCount', async t => {
     t.test('should increase the count of a metric', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['GET', '200'])
-      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['GET', '200'], 5)
-      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['POST', '200'], 8)
-      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['POST', '400'], 10)
+      telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['GET', '200'])
+      telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['GET', '200'], 5)
+      telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['POST', '200'], 8)
+      telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['POST', '400'], 10)
 
-      t.equal((await telemetry.groupedCountRegistry.metrics()).trim(), dedent`
-      # HELP bitswap_request_per_connections_grouped_count BitSwap Request Per Connnection
-      # TYPE bitswap_request_per_connections_grouped_count counter
-      bitswap_request_per_connections_grouped_count{method="GET",status="200"} 6
-      bitswap_request_per_connections_grouped_count{method="POST",status="200"} 8
-      bitswap_request_per_connections_grouped_count{method="POST",status="400"} 10
+      t.equal((await telemetry.labelCountRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_request_per_connections_label_count BitSwap Request Per Connnection
+      # TYPE bitswap_request_per_connections_label_count counter
+      bitswap_request_per_connections_label_count{method="GET",status="200"} 6
+      bitswap_request_per_connections_label_count{method="POST",status="200"} 8
+      bitswap_request_per_connections_label_count{method="POST",status="400"} 10
       `.trim())
 
-      t.equal((await telemetry.groupedCountRegistry.metrics()).trim(), dedent`
-      # HELP bitswap_request_per_connections_grouped_count BitSwap Request Per Connnection
-      # TYPE bitswap_request_per_connections_grouped_count counter
-      bitswap_request_per_connections_grouped_count{method="GET",status="200"} 6
-      bitswap_request_per_connections_grouped_count{method="POST",status="200"} 8
-      bitswap_request_per_connections_grouped_count{method="POST",status="400"} 10
+      t.equal((await telemetry.labelCountRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_request_per_connections_label_count BitSwap Request Per Connnection
+      # TYPE bitswap_request_per_connections_label_count counter
+      bitswap_request_per_connections_label_count{method="GET",status="200"} 6
+      bitswap_request_per_connections_label_count{method="POST",status="200"} 8
+      bitswap_request_per_connections_label_count{method="POST",status="400"} 10
       `.trim())
 
       telemetry.resetCounters()
 
-      t.equal((await telemetry.groupedCountRegistry.metrics()).trim(), dedent`
-      # HELP bitswap_request_per_connections_grouped_count BitSwap Request Per Connnection
-      # TYPE bitswap_request_per_connections_grouped_count counter
+      t.equal((await telemetry.labelCountRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_request_per_connections_label_count BitSwap Request Per Connnection
+      # TYPE bitswap_request_per_connections_label_count counter
       `.trim())
     })
 
     t.test('all metrics should be defined in the config file', async t => {
       const telemetry = new Telemetry({ configFile, logger })
-      t.throws(() => telemetry.increaseGroupedCount('unknown'), { message: 'Metric unknown not found' })
+      t.throws(() => telemetry.increaseLabelCount('unknown'), { message: 'Metric unknown not found' })
     })
   })
 
@@ -251,13 +251,13 @@ t.test('Telemetry', async t => {
       telemetry.increaseGauge('bitswap-total-connections', 10)
       await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { throw new Error('BOOM') })
       telemetry.increaseCount('s3-request-count', 10)
-      telemetry.increaseGroupedCount('bitswap-request-per-connections-grouped-count', ['GET', '200'])
+      telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['GET', '200'])
 
       const result = await telemetry.export()
 
       t.ok(result.includes('s3_request_count 10'))
       t.ok(result.includes('dynamo_request_count 0'))
-      t.ok(result.includes('bitswap_request_per_connections_grouped_count{method="GET",status="200"} 1'))
+      t.ok(result.includes('bitswap_request_per_connections_label_count{method="GET",status="200"} 1'))
       t.ok(result.includes('bitswap_connections_duration_durations_count 1'))
       t.ok(result.includes('bitswap_event_loop_utilization 0'))
       t.ok(result.includes('bitswap_total_connections 11'))

@@ -6,8 +6,8 @@ metrics:
       description: AWS S3 requests
     dynamo-request-count:
       description: AWS DynamoDB requests
-  groupedCount:
-    bitswap-request-per-connections-grouped-count:
+  labelCount:
+    bitswap-request-per-connections-label-count:
       description: BitSwap Request Per Connnection
       labels:
         - method

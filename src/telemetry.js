@@ -14,7 +14,7 @@ class Telemetry {
 
     this.allRegistry = new promClient.Registry()
     this.countRegistry = new promClient.Registry()
-    this.groupedCountRegistry = new promClient.Registry()
+    this.labelCountRegistry = new promClient.Registry()
     this.durationsRegistry = new promClient.Registry()
     this.gaugeRegistry = new promClient.Registry()
     this.logger = logger
@@ -35,13 +35,13 @@ class Telemetry {
           registers: [this.countRegistry, this.allRegistry] // specify a non-default registry
         })
       }
-      for (const [category, metric] of Object.entries(metrics.groupedCount || {})) {
+      for (const [category, metric] of Object.entries(metrics.labelCount || {})) {
         /* eslint-disable-next-line no-new */
         new promClient.Counter({
           name: category.replaceAll('-', '_'),
           help: metric.description,
           labelNames: metric.labels,
-          registers: [this.groupedCountRegistry, this.allRegistry] // specify a non-default registry
+          registers: [this.labelCountRegistry, this.allRegistry] // specify a non-default registry
         })
       }
       for (const [category, metric] of Object.entries(metrics.durations || {})) {
@@ -73,7 +73,7 @@ class Telemetry {
 
   resetCounters () {
     this.countRegistry.resetMetrics()
-    this.groupedCountRegistry.resetMetrics()
+    this.labelCountRegistry.resetMetrics()
   }
 
   async export () {
@@ -86,8 +86,8 @@ class Telemetry {
     return metric.inc(amount)
   }
 
-  increaseGroupedCount (category, labels = [], amount = 1) {
-    const metric = this.groupedCountRegistry.getSingleMetric(category.replaceAll('-', '_'))
+  increaseLabelCount (category, labels = [], amount = 1) {
+    const metric = this.labelCountRegistry.getSingleMetric(category.replaceAll('-', '_'))
     if (!metric) throw new Error(`Metric ${category} not found`)
     return metric.labels(...labels).inc(amount)
   }
