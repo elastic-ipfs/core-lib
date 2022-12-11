@@ -1,102 +1,7 @@
 import { readFileSync } from 'fs'
 import { load as ymlLoad } from 'js-yaml'
-import * as hdr from 'hdr-histogram-js'
-
+import promClient from 'prom-client'
 const PERCENTILES = [0.001, 0.01, 0.1, 1, 2.5, 10, 25, 50, 75, 90, 97.5, 99, 99.9, 99.99, 99.999]
-
-const METRIC_GROUPED_COUNT = 'grouped-count'
-const METRIC_DURATIONS = 'durations'
-const METRIC_COUNT = 'count'
-
-const TYPE_COUNTER = 'counter'
-const TYPE_HISTOGRAM = 'histogram'
-const TYPE_GAUGE = 'gauge'
-
-class Aggregator {
-  constructor (category, description, metric, type) {
-    this.tag = `${category}-${metric}`
-    this.description = `${description} (${metric})`
-    this.exportName = this.tag.replaceAll('-', '_')
-
-    // type is optional
-    if (!type) {
-      // set the type by the metric
-      if (metric === METRIC_DURATIONS) {
-        this.type = TYPE_HISTOGRAM
-      } else {
-        this.type = TYPE_COUNTER
-        this.exportName += '_total'
-        this.isGrouped = metric === METRIC_GROUPED_COUNT
-      }
-    } else {
-      this.type = type
-    }
-
-    this.groupedSum = {}
-    this.sum = 0
-    hdr.initWebAssemblySync()
-    this.histogram = hdr.build({
-      lowestDiscernibleValue: 1,
-      highestTrackableValue: 1e9,
-      numberOfSignificantValueDigits: 5,
-      useWebAssembly: true
-    })
-  }
-
-  record (value) {
-    this.sum += value
-
-    if (this.type === TYPE_HISTOGRAM) {
-      this.histogram.recordValue(value)
-    }
-  }
-
-  recordWithKey (key, value) {
-    if (!this.groupedSum[key]) {
-      this.groupedSum[key] = value
-    } else {
-      this.groupedSum[key] += value
-    }
-  }
-
-  reset () {
-    this.sum = 0
-    this.groupedSum = {}
-    this.histogram.reset()
-  }
-
-  current () {
-    const { minNonZeroValue: min, maxValue: max, mean, stdDeviation: stdDev, totalCount: count } = this.histogram
-
-    const value = {
-      empty: (this.type === TYPE_HISTOGRAM && count === 0) ||
-        ((this.type === TYPE_COUNTER && !this.isGrouped) && this.sum === 0) ||
-        ((this.type === TYPE_COUNTER && this.isGrouped) && Object.keys(this.groupedSum).length === 0),
-      sum: this.sum,
-      isGrouped: this.isGrouped,
-      groupedSum: this.groupedSum,
-      histogram:
-        count > 0
-          ? {
-              count,
-              min,
-              max,
-              mean,
-              stdDev,
-              stdError: stdDev / Math.sqrt(count),
-              percentiles: Object.fromEntries(
-                PERCENTILES.map(percentile => [percentile, this.histogram.getValueAtPercentile(percentile)])
-              )
-            }
-          : undefined,
-      timestamp: Date.now()
-    }
-
-    this.reset()
-
-    return value
-  }
-}
 
 class Telemetry {
   constructor ({ configFile, logger }) {
@@ -107,20 +12,54 @@ class Telemetry {
       throw new Error('Missing logger')
     }
 
+    this.allRegistry = new promClient.Registry()
+    this.countRegistry = new promClient.Registry()
+    this.labelCountRegistry = new promClient.Registry()
+    this.durationsRegistry = new promClient.Registry()
+    this.gaugeRegistry = new promClient.Registry()
     this.logger = logger
 
     try {
       const { component, metrics, version, buildDate } = ymlLoad(readFileSync(configFile, 'utf-8'))
+
       // Setup
       this.component = component
       this.version = `${version}-build.${buildDate}`
 
       // Create metrics
-      this.metrics = new Map()
-      for (const [category, description] of Object.entries(metrics)) {
-        this.createMetric(category, description, METRIC_COUNT)
-        this.createMetric(category, description, METRIC_GROUPED_COUNT)
-        this.createMetric(category, description, METRIC_DURATIONS)
+      for (const [category, metric] of Object.entries(metrics.count || {})) {
+      /* eslint-disable-next-line no-new */
+        new promClient.Counter({
+          name: category.replaceAll('-', '_'),
+          help: metric.description,
+          registers: [this.countRegistry, this.allRegistry] // specify a non-default registry
+        })
+      }
+      for (const [category, metric] of Object.entries(metrics.labelCount || {})) {
+        /* eslint-disable-next-line no-new */
+        new promClient.Counter({
+          name: category.replaceAll('-', '_'),
+          help: metric.description,
+          labelNames: metric.labels,
+          registers: [this.labelCountRegistry, this.allRegistry] // specify a non-default registry
+        })
+      }
+      for (const [category, metric] of Object.entries(metrics.durations || {})) {
+        /* eslint-disable-next-line no-new */
+        new promClient.Histogram({
+          name: category.replaceAll('-', '_'),
+          help: metric.description,
+          buckets: PERCENTILES,
+          registers: [this.durationsRegistry, this.allRegistry] // specify a non-default registry
+        })
+      }
+      for (const [category, metric] of Object.entries(metrics.gauge || {})) {
+        /* eslint-disable-next-line no-new */
+        new promClient.Gauge({
+          name: category.replaceAll('-', '_'),
+          help: metric.description,
+          registers: [this.gaugeRegistry, this.allRegistry] // specify a non-default registry
+        })
       }
     } catch (err) {
       logger.error({ err }, 'error in telemetry constructor')
@@ -128,93 +67,61 @@ class Telemetry {
     }
   }
 
-  clear () {
-    this.metrics.clear()
+  resetAll () {
+    this.allRegistry.resetMetrics()
   }
 
-  createMetric (category, description, metric, type) {
-    const instance = new Aggregator(category, description, metric, type)
-
-    this.metrics.set(instance.tag, instance)
+  resetCounters () {
+    this.countRegistry.resetMetrics()
+    this.labelCountRegistry.resetMetrics()
   }
 
-  ensureMetric (category, metric) {
-    const metricObject = this.metrics.get(`${category}-${metric}`)
-
-    if (!metricObject) {
-      throw new Error(`Metric ${category} not found`)
-    }
-
-    return metricObject
-  }
-
-  export () {
-    let output = ''
-
-    for (const metric of this.metrics.values()) {
-      const current = metric.current()
-
-      if (current.empty) {
-        continue
-      }
-
-      output += `# HELP ${metric.exportName} ${metric.description}\n`
-      output += `# TYPE ${metric.exportName} ${metric.type}\n`
-
-      if (metric.type === TYPE_HISTOGRAM) {
-        output += `${metric.exportName}_count ${current.histogram.count} ${current.timestamp}\n`
-        output += `${metric.exportName}_sum ${current.sum} ${current.timestamp}\n`
-
-        const percentilesValues = current.histogram.percentiles
-        for (const percentile of PERCENTILES) {
-          output += `${metric.exportName}_bucket{le="${percentile}"} ${percentilesValues[percentile]} ${current.timestamp}\n`
-        }
-      } else if (metric.type === TYPE_COUNTER && metric.isGrouped) {
-        for (const [key, value] of Object.entries(current.groupedSum)) {
-          output += `${metric.exportName}${key} ${value} ${current.timestamp}\n`
-        }
-      } else {
-        output += `${metric.exportName} ${current.sum} ${current.timestamp}\n`
-      }
-    }
-
-    if (!output) {
-      output = '# no registered metrics'
-    }
-
-    return output.trim()
+  async export () {
+    return this.allRegistry.metrics()
   }
 
   increaseCount (category, amount = 1) {
-    const metric = this.ensureMetric(category, METRIC_COUNT)
-    metric.record(amount)
+    const metric = this.countRegistry.getSingleMetric(category.replaceAll('-', '_'))
+    if (!metric) throw new Error(`Metric ${category} not found`)
+    return metric.inc(amount)
   }
 
-  decreaseCount (category, amount = 1) {
-    const metric = this.ensureMetric(category, METRIC_COUNT)
-    metric.record(-1 * amount)
+  increaseLabelCount (category, labels = [], amount = 1) {
+    const metric = this.labelCountRegistry.getSingleMetric(category.replaceAll('-', '_'))
+    if (!metric) throw new Error(`Metric ${category} not found`)
+    return metric.labels(...labels).inc(amount)
   }
 
-  increaseCountWithKey (category, key, amount = 1) {
-    const metric = this.ensureMetric(category, METRIC_GROUPED_COUNT)
-    metric.recordWithKey(key, amount)
+  increaseGauge (category, amount = 1) {
+    const metric = this.gaugeRegistry.getSingleMetric(category.replaceAll('-', '_'))
+    if (!metric) throw new Error(`Metric ${category} not found`)
+    return metric.inc(amount)
   }
 
-  decreaseCountWithKey (category, key, amount = 1) {
-    const metric = this.ensureMetric(category, METRIC_GROUPED_COUNT)
-    metric.recordWithKey(key, -1 * amount)
+  decreaseGauge (category, amount = 1) {
+    const metric = this.gaugeRegistry.getSingleMetric(category.replaceAll('-', '_'))
+    if (!metric) throw new Error(`Metric ${category} not found`)
+    return metric.inc(-1 * amount)
+  }
+
+  setGauge (category, value) {
+    const metric = this.gaugeRegistry.getSingleMetric(category.replaceAll('-', '_'))
+    if (!metric) throw new Error(`Metric ${category} not found`)
+    return metric.set(value)
   }
 
   async trackDuration (category, promise) {
-    const metric = this.ensureMetric(category, METRIC_DURATIONS)
-    const startTime = process.hrtime.bigint()
+    const metric = this.durationsRegistry.getSingleMetric(category.replaceAll('-', '_'))
+    if (!metric) throw new Error(`Metric ${category} not found`)
+
+    const end = metric.startTimer()
 
     try {
       return await promise
     } finally {
-      metric.record(Number(process.hrtime.bigint() - startTime) / 1e6)
+      end()
     }
   }
 }
 
-export { Telemetry, METRIC_COUNT, METRIC_DURATIONS, METRIC_GROUPED_COUNT, TYPE_COUNTER, TYPE_HISTOGRAM, TYPE_GAUGE }
+export { Telemetry }

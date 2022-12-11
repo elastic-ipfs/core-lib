@@ -1,6 +1,6 @@
 {
   "name": "e-ipfs-core-lib",
-  "version": "0.3.0",
+  "version": "0.4.0-beta-01",
   "description": "E-IPFS core library",
   "license": "(Apache-2.0 AND MIT)",
   "homepage": "https://github.com/elastic-ipfs/core-lib",
@@ -17,12 +17,12 @@
   "dependencies": {
     "@aws-sdk/util-dynamodb": "^3.218.0",
     "bl": "^6.0.0",
-    "hdr-histogram-js": "^3.0.0",
     "js-yaml": "^4.1.0",
     "libp2p": "^0.40.0",
     "pino": "^8.7.0",
     "pino-pretty": "^9.1.1",
     "piscina": "^3.2.0",
+    "prom-client": "^14.1.0",
     "protobufjs": "^7.1.2",
     "sodium-native": "^3.4.1",
     "undici": "^5.13.0",
