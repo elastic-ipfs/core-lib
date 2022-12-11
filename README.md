@@ -52,7 +52,7 @@ telemetry.resetCount()
     ```
 * resetAll(): Reset all metrics
 * resetCounters(): Reset count and labelCount metrics
-* async export(): Export file in Prometheus format 
+* async export(): Export values  in Prometheus format 
 * increaseCount(category, amount = 1): Increase the count for a category
   * category: String - The given name of the category
 * increaseLabelCount(category, labels: Array, amount = 1): Increase the count for a key in a category
