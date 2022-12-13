@@ -21,9 +21,10 @@ Create metrics yaml configuration file:
 ---
 component: bitswap-peer
 metrics:
-  bitswap-total-connections: BitSwap Total Connections
-  s3-request: AWS S3 requests
-  dynamo-request: AWS DynamoDB requests
+  count:
+    bitswap-total-connections: BitSwap Total Connections
+    s3-request: AWS S3 requests
+    dynamo-request: AWS DynamoDB requests
 version: 0.1.0
 buildDate: "20220307.1423"
 ```
@@ -39,7 +40,8 @@ telemetry.increaseCount('bitswap-total-connections', 2)
 
 const result = await telemetry.export()
 console.log(result)
-telemetry.resetCount()
+telemetry.resetDurations()
+telemetry.resetCounters()
 ```
 
 #### Telemetry instance methods
@@ -52,6 +54,8 @@ telemetry.resetCount()
     ```
 * resetAll(): Reset all metrics
 * resetCounters(): Reset count and labelCount metrics
+* resetDurations(): Reset durations metrics
+* resetGauges(): Reset gauges metrics
 * async export(): Export values  in Prometheus format 
 * increaseCount(category, amount = 1): Increase the count for a category
   * category: String - The given name of the category

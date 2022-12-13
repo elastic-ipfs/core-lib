@@ -203,6 +203,24 @@ t.test('Telemetry', async t => {
       `.trim())
     })
 
+    t.test('should reset only the gauge', async t => {
+      const telemetry = new Telemetry({ configFile, logger })
+      telemetry.increaseGauge('bitswap-total-connections')
+      telemetry.increaseGauge('bitswap-total-connections', 10)
+
+      telemetry.resetGauges()
+
+      t.equal((await telemetry.gaugeRegistry.metrics()).trim(), dedent`
+      # HELP bitswap_event_loop_utilization BitSwap Event Loop Utilization
+      # TYPE bitswap_event_loop_utilization gauge
+      bitswap_event_loop_utilization 0
+      
+      # HELP bitswap_total_connections BitSwap Total Connections
+      # TYPE bitswap_total_connections gauge
+      bitswap_total_connections 0
+      `.trim())
+    })
+
     t.test('all metrics should be defined in the config file', async t => {
       const telemetry = new Telemetry({ configFile, logger })
       t.throws(() => telemetry.increaseGauge('unknown'), { message: 'Metric unknown not found' })
@@ -227,7 +245,7 @@ t.test('Telemetry', async t => {
         await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(300) })
       ])
       t.ok((await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count 6'))
-      telemetry.resetAll()
+      telemetry.resetDurations()
       t.ok(!(await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count'))
     })
 
