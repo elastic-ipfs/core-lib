@@ -76,6 +76,14 @@ class Telemetry {
     this.labelCountRegistry.resetMetrics()
   }
 
+  resetDurations () {
+    this.durationsRegistry.resetMetrics()
+  }
+
+  resetGauges () {
+    this.gaugeRegistry.resetMetrics()
+  }
+
   async export () {
     return this.allRegistry.metrics()
   }
