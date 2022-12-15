@@ -44,6 +44,10 @@ telemetry.resetDurations()
 telemetry.resetCounters()
 ```
 
+#### Options
+
+- `configFile`: path to yml config file, see [Configuration file format](#configuration-file-format)
+
 #### Telemetry instance methods
 * export: Export the metrics in `prometheus` format
   ```
@@ -52,11 +56,14 @@ telemetry.resetCounters()
     counter_label_count_total{id="123"} 1 now
     counter_label_count_total{id="456"} 2 now
     ```
+* get(name): Get a single metric
+* getGaugeValue(name): Get the value of the gauge metric
+* getHistogramValue(name): Get the value (sum) of the histogram metric
 * resetAll(): Reset all metrics
 * resetCounters(): Reset count and labelCount metrics
 * resetDurations(): Reset durations metrics
 * resetGauges(): Reset gauges metrics
-* async export(): Export values  in Prometheus format 
+* async export(): Export values  in Prometheus format
 * increaseCount(category, amount = 1): Increase the count for a category
   * category: String - The given name of the category
 * increaseLabelCount(category, labels: Array, amount = 1): Increase the count for a key in a category
@@ -76,9 +83,10 @@ telemetry.resetCounters()
   * category: String - The given name of the category
   * promise: Promise - The function to be tracked
 
-#### Configuration
+#### Configuration file format
 
-Eg. of `metrics.yml`
+Eg. of `metrics.yml`, to be passed to `configFile`
+
 ```yaml
 ---
 component: bitswap-peer
@@ -102,6 +110,13 @@ metrics:
       description: BitSwap Event Loop Utilization
     bitswap-total-connections:
       description: BitSwap Total Connections
+
+  process:
+    elu: 
+      name: bitswap-elu
+      description: Bitswap Event Loop Utilization
+      interval: 500
+
 version: 0.1.0
 buildDate: "20220307.1423"
 ```
