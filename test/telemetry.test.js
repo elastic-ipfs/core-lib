@@ -8,14 +8,13 @@ import {
 } from '../src/index.js'
 import * as helper from './helper/index.js'
 
-// process.env.NOW = 'now'
-
 const setTimeoutAsync = promisify(setTimeout)
 
 t.test('Telemetry', async t => {
-  const configFile = path.join(dirname(import.meta.url), 'fixtures/metrics.yml')
+  const defaultConfigFile = path.join(dirname(import.meta.url), 'fixtures/metrics.yml')
   const noMetricConfigFile = path.join(dirname(import.meta.url), 'fixtures/no-metrics.yml')
   const noCountMetricConfigFile = path.join(dirname(import.meta.url), 'fixtures/no-count-metrics.yml')
+  const processMetricConfigFile = path.join(dirname(import.meta.url), 'fixtures/process-metrics.yml')
   let logger
 
   const now = Date.now
@@ -33,7 +32,7 @@ t.test('Telemetry', async t => {
 
   t.test('constructor', async t => {
     t.test('should create a new telemetry instance', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       t.ok(telemetry)
 
       t.equal(telemetry.allRegistry.getSingleMetric('s3_request_count').constructor.name, 'Counter')
@@ -55,7 +54,7 @@ t.test('Telemetry', async t => {
     })
 
     t.test('should get error missing logger', async t => {
-      t.throws(() => new Telemetry({ configFile }), { message: 'Missing logger' })
+      t.throws(() => new Telemetry({ configFile: defaultConfigFile }), { message: 'Missing logger' })
     })
 
     t.test('should get error on invalid config file', async t => {
@@ -70,7 +69,7 @@ t.test('Telemetry', async t => {
 
   t.test('increaseCount', async t => {
     t.test('should increase the count of a metric', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       telemetry.increaseCount('s3-request-count')
       telemetry.increaseCount('s3-request-count', 10)
 
@@ -108,14 +107,14 @@ t.test('Telemetry', async t => {
     })
 
     t.test('all metrics should be defined in the config file', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       t.throws(() => telemetry.increaseCount('unknown'), { message: 'Metric unknown not found' })
     })
   })
 
   t.test('increaseLabelCount', async t => {
     t.test('should increase the count of a metric', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['GET', '200'])
       telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['GET', '200'], 5)
       telemetry.increaseLabelCount('bitswap-request-per-connections-label-count', ['POST', '200'], 8)
@@ -146,14 +145,14 @@ t.test('Telemetry', async t => {
     })
 
     t.test('all metrics should be defined in the config file', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       t.throws(() => telemetry.increaseLabelCount('unknown'), { message: 'Metric unknown not found' })
     })
   })
 
   t.test('update gauge values', async t => {
     t.test('should increase the gouge of a metric', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       telemetry.increaseGauge('bitswap-total-connections')
       telemetry.increaseGauge('bitswap-total-connections', 10)
 
@@ -204,7 +203,7 @@ t.test('Telemetry', async t => {
     })
 
     t.test('should reset only the gauge', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       telemetry.increaseGauge('bitswap-total-connections')
       telemetry.increaseGauge('bitswap-total-connections', 10)
 
@@ -222,7 +221,7 @@ t.test('Telemetry', async t => {
     })
 
     t.test('all metrics should be defined in the config file', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       t.throws(() => telemetry.increaseGauge('unknown'), { message: 'Metric unknown not found' })
       t.throws(() => telemetry.decreaseGauge('unknown'), { message: 'Metric unknown not found' })
       t.throws(() => telemetry.setGauge('unknown'), { message: 'Metric unknown not found' })
@@ -231,7 +230,7 @@ t.test('Telemetry', async t => {
 
   t.test('trackDuration', async t => {
     t.test('should track a function', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
 
       await Promise.all([
         await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(100) }),
@@ -250,12 +249,12 @@ t.test('Telemetry', async t => {
     })
 
     t.test('all metrics should be defined in the config file', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       await t.rejects(() => telemetry.trackDuration('unknown'), { message: 'Metric unknown not found' })
     })
 
     t.test('should handle a failing function', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { throw new Error('BOOM') })
 
       t.ok((await telemetry.durationsRegistry.metrics()).includes('bitswap_connections_duration_durations_count 1'))
@@ -264,7 +263,7 @@ t.test('Telemetry', async t => {
 
   t.test('export values', async t => {
     t.test('should export all values', async t => {
-      const telemetry = new Telemetry({ configFile, logger })
+      const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
       telemetry.increaseGauge('bitswap-total-connections')
       telemetry.increaseGauge('bitswap-total-connections', 10)
       await telemetry.trackDuration('bitswap-connections-duration-durations', async () => { throw new Error('BOOM') })
@@ -293,5 +292,44 @@ t.test('Telemetry', async t => {
     const telemetry = new Telemetry({ configFile: noCountMetricConfigFile, logger })
 
     t.same(Object.keys(telemetry.allRegistry._metrics), ['bitswap_connections_duration_durations'])
+  })
+
+  t.test('should collect event loop metric when set from config file', async t => {
+    const telemetry = new Telemetry({ configFile: processMetricConfigFile, logger })
+
+    const result = await telemetry.export()
+
+    await setTimeoutAsync(500)
+
+    t.ok(result.includes('bitswap_elu'))
+    t.ok(telemetry.collectEluInterval)
+  })
+
+  t.test('should get a gauge metric value', async t => {
+    const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
+
+    telemetry.increaseGauge('bitswap-total-connections', 99)
+
+    t.equal(telemetry.getGaugeValue('bitswap-total-connections'), 99)
+  })
+
+  t.test('should get a histogram metric value', async t => {
+    const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
+
+    telemetry.trackDuration('bitswap-connections-duration-durations', async () => { await setTimeoutAsync(100) })
+
+    await setTimeoutAsync(100)
+
+    t.ok(telemetry.getHistogramValue('bitswap-connections-duration-durations') > 0)
+  })
+
+  t.test('should not get a gauge metric value', async t => {
+    const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
+    t.equal(telemetry.getGaugeValue('not-a-metric-name'), undefined)
+  })
+
+  t.test('should get a histogram metric value', async t => {
+    const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
+    t.equal(telemetry.getHistogramValue('not-a-metric-name'), undefined)
   })
 })

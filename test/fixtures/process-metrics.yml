@@ -1,0 +1,15 @@
+---
+component: bitswap-peer
+metrics:
+  count:
+    s3-request-count:
+      description: AWS S3 requests
+
+  process:
+    elu: 
+      name: bitswap-elu
+      description: Bitswap Event Loop Utilization
+      interval: 100
+
+version: 0.2.0
+buildDate: "20220307.1423"
