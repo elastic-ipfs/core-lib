@@ -10,6 +10,14 @@ metrics:
       name: bitswap-elu
       description: Bitswap Event Loop Utilization
       interval: 100
+    memory: 
+      name: bitswap-memory
+      description: Bitswap Memory Usage
+      interval: 100
+    cpu: 
+      name: bitswap-cpu
+      description: Bitswap CPU Usage %
+      interval: 100
 
-version: 0.2.0
-buildDate: "20220307.1423"
+version: 0.3.0
+buildDate: "20221215.1122"
