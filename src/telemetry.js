@@ -1,8 +1,10 @@
 
 import { performance } from 'node:perf_hooks'
+import { memoryUsage, cpuUsage } from 'node:process'
 import { readFileSync } from 'fs'
 import { load as ymlLoad } from 'js-yaml'
 import promClient from 'prom-client'
+
 const PERCENTILES = [0.1, 1, 10, 25, 50, 75, 90, 97.5, 99]
 
 class Telemetry {
@@ -61,13 +63,33 @@ class Telemetry {
         }))
       }
 
-      if (metrics.process?.elu) {
-        this.collectEventLoopUtilization({
-          name: metrics.process.elu.name,
-          description: metrics.process.elu.description,
-          interval: metrics.process.elu.interval,
-          registers: [this.allRegistry]
-        })
+      if (metrics.process) {
+        if (metrics.process.elu) {
+          this.collectEventLoopUtilization({
+            name: metrics.process.elu.name,
+            description: metrics.process.elu.description,
+            interval: metrics.process.elu.interval,
+            registers: [this.allRegistry]
+          })
+        }
+
+        if (metrics.process.memory) {
+          this.collectMemoryUsage({
+            name: metrics.process.memory.name,
+            description: metrics.process.memory.description,
+            interval: metrics.process.memory.interval,
+            registers: [this.allRegistry]
+          })
+        }
+
+        if (metrics.process.cpu) {
+          this.collectCpuUsage({
+            name: metrics.process.cpu.name,
+            description: metrics.process.cpu.description,
+            interval: metrics.process.cpu.interval,
+            registers: [this.allRegistry]
+          })
+        }
       }
     } catch (err) {
       logger.error({ err }, 'error in telemetry constructor')
@@ -89,6 +111,39 @@ class Telemetry {
       const u = performance.eventLoopUtilization(elu2, elu1)
       metric.set(u.utilization)
       elu1 = elu2
+    }, interval).unref()
+  }
+
+  collectMemoryUsage ({ name, description, interval, registers }) {
+    const metric = new promClient.Gauge({
+      name: name.replaceAll('-', '_'),
+      help: description,
+      registers
+    })
+    this.metrics.set(name, metric)
+
+    this.collectMemoryInterval = setInterval(() => {
+      metric.set(memoryUsage.rss())
+    }, interval).unref()
+  }
+
+  collectCpuUsage ({ name, description, interval, registers }) {
+    const metric = new promClient.Gauge({
+      name: name.replaceAll('-', '_'),
+      help: description,
+      registers
+    })
+    this.metrics.set(name, metric)
+
+    let cpu1 = cpuUsage()
+    let timer1 = process.hrtime.bigint()
+    this.collectCpuInterval = setInterval(() => {
+      const cpu2 = cpuUsage(cpu1)
+      const timer2 = process.hrtime.bigint()
+      const v = 100 * cpu2.user / Number((timer2 - timer1) / 1000n)
+      metric.set(v)
+      cpu1 = cpu2
+      timer1 = timer2
     }, interval).unref()
   }
 

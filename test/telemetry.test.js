@@ -305,6 +305,28 @@ t.test('Telemetry', async t => {
     t.ok(telemetry.collectEluInterval)
   })
 
+  t.test('should collect memory metric when set from config file', async t => {
+    const telemetry = new Telemetry({ configFile: processMetricConfigFile, logger })
+
+    const result = await telemetry.export()
+
+    await setTimeoutAsync(500)
+
+    t.ok(result.includes('bitswap_memory'))
+    t.ok(telemetry.collectMemoryInterval)
+  })
+
+  t.test('should collect cpu metric when set from config file', async t => {
+    const telemetry = new Telemetry({ configFile: processMetricConfigFile, logger })
+
+    const result = await telemetry.export()
+
+    await setTimeoutAsync(500)
+
+    t.ok(result.includes('bitswap_cpu'))
+    t.ok(telemetry.collectCpuInterval)
+  })
+
   t.test('should get a gauge metric value', async t => {
     const telemetry = new Telemetry({ configFile: defaultConfigFile, logger })
 
