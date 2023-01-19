@@ -3,7 +3,7 @@
 import { default as protobuf } from 'protobufjs'
 import path from 'path'
 
-import { dirname } from '../src/util.js'
+import { dirname, varintEncoder } from '../src/util.js'
 import { CID } from 'multiformats/cid'
 
 const definitions = protobuf.loadSync(path.join(dirname(import.meta.url), './bitswap.proto'))
@@ -144,15 +144,17 @@ class WantList {
 class Block {
   constructor (prefixOrCid, data) {
     if (prefixOrCid instanceof CID) {
-      prefixOrCid = Buffer.from([
-        prefixOrCid.version,
-        prefixOrCid.code,
-        prefixOrCid.multihash.bytes[0],
-        prefixOrCid.multihash.bytes[1]
+      const version = prefixOrCid.version
+      const codec = prefixOrCid.code
+      const multihash = prefixOrCid.multihash.code
+      const digestLength = prefixOrCid.multihash.digest.length
+      this.prefix = varintEncoder([
+        version, codec, multihash, digestLength
       ])
+    } else {
+      this.prefix = prefixOrCid
     }
 
-    this.prefix = prefixOrCid
     this.data = data
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "e-ipfs-core-lib",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "E-IPFS core library",
   "license": "(Apache-2.0 AND MIT)",
   "homepage": "https://github.com/elastic-ipfs/core-lib",
@@ -26,6 +26,7 @@
     "protobufjs": "^7.1.2",
     "sodium-native": "^3.4.1",
     "undici": "^5.13.0",
+    "varint": "^6.0.0",
     "xml-js": "^1.6.11"
   },
   "devDependencies": {
