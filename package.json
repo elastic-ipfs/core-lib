@@ -24,7 +24,7 @@
     "piscina": "^3.2.0",
     "prom-client": "^14.1.0",
     "protobufjs": "^7.1.2",
-    "sodium-native": "^3.4.1",
+    "sodium-native": "^4.0.0",
     "undici": "^5.13.0",
     "varint": "^6.0.0",
     "xml-js": "^1.6.11"
