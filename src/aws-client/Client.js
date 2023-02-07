@@ -30,9 +30,15 @@ class Client {
     // custom agent is set for testing purpose only
     this.agent = agent ?? new Agent(this.awsAgentOptions)
     this.awsAgentOptions = awsAgentOptions
+
     this.s3Options = s3Options
+
     this.dynamoOptions = dynamoOptions
-    this.dynamoUrl = `https://dynamodb.${dynamoOptions.region}.amazonaws.com`
+    if (dynamoOptions.endpointUrl) {
+      this.dynamoUrl = dynamoOptions.endpointUrl
+    } else {
+      this.dynamoUrl = `https://dynamodb.${dynamoOptions.region}.amazonaws.com`
+    }
 
     this.credentialDurationSeconds = credentialDurationSeconds // in seconds
     this.refreshCredentialsInterval = refreshCredentialsInterval
@@ -128,7 +134,11 @@ class Client {
   }
 
   s3Url (region, bucket, key = '') {
-    return 'https://' + bucket + '.s3.' + region + '.amazonaws.com' + key
+    if (this.s3Options.endpointUrl) {
+      return this.s3Options.endpointUrl + '/' + bucket + key
+    } else {
+      return 'https://' + bucket + '.s3.' + region + '.amazonaws.com' + key
+    }
   }
 
   async s3Fetch ({ region, bucket, key, offset, length, retries, retryDelay }) {

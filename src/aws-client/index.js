@@ -8,8 +8,17 @@ function awsClientOptions (config, logger) {
     connections: config.awsClientConcurrency,
     pipelining: config.awsClientPipelining
   }
-  const awsS3Options = { maxRetries: config.s3MaxRetries, retryDelay: config.s3RetryDelay }
-  const awsDynamoOptions = { region: config.dynamoRegion, maxRetries: config.dynamoMaxRetries, retryDelay: config.dynamoRetryDelay }
+  const awsS3Options = {
+    endpointUrl: config.s3EndpointUrl,
+    maxRetries: config.s3MaxRetries,
+    retryDelay: config.s3RetryDelay
+  }
+  const awsDynamoOptions = {
+    endpointUrl: config.dynamoEndpointUrl,
+    region: config.dynamoRegion,
+    maxRetries: config.dynamoMaxRetries,
+    retryDelay: config.dynamoRetryDelay
+  }
   return {
     agent: config.agent,
     awsAgentOptions,
